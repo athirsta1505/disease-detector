@@ -1,5 +1,5 @@
-// Add this route to the SAME server.js (or run it standalone) — it's the
-// webhook Hasura calls when the frontend runs the "diagnosePlant" mutation.
+// This is the Hasura Action webhook handler for the Disease Detector.
+// It now uses Google Gemini (free tier) instead of the Anthropic API.
 //
 // Hasura POSTs a body shaped like:
 //   { action: { name: "diagnosePlant" }, input: { image, mediaType, prompt }, session_variables: {...} }
@@ -12,57 +12,63 @@ const app = express();
 
 app.use(express.json({ limit: '15mb' }));
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.post('/hasura/diagnose', async (req, res) => {
   try {
     const { image, mediaType, prompt } = req.body.input || {};
 
     if (!image || !mediaType || !prompt) {
-      // Hasura Actions expect a non-200 + { message } shape for errors,
-      // which it then surfaces as a GraphQL error to the frontend.
       return res.status(400).json({ message: 'Missing image, mediaType, or prompt.' });
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-            { type: 'text', text: prompt }
-          ]
-        }]
-      })
-    });
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ message: 'Server is missing GEMINI_API_KEY.' });
+    }
+
+    // Gemini's generateContent endpoint (free tier: gemini-1.5-flash)
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mediaType, data: image } }
+            ]
+          }]
+        })
+      }
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Anthropic API error:', data);
+      console.error('Gemini API error:', data);
       return res.status(500).json({ message: (data.error && data.error.message) || 'The AI service returned an error.' });
     }
 
-    const textBlock = (data.content || []).find(b => b.type === 'text');
-    if (!textBlock || !textBlock.text) {
+    const textBlock = data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts &&
+      data.candidates[0].content.parts[0] &&
+      data.candidates[0].content.parts[0].text;
+
+    if (!textBlock) {
+      console.error('Unexpected Gemini response shape:', JSON.stringify(data));
       return res.status(500).json({ message: 'No diagnosis text came back from the model.' });
     }
 
-    const start = textBlock.text.indexOf('{');
-    const end = textBlock.text.lastIndexOf('}');
+    const start = textBlock.indexOf('{');
+    const end = textBlock.lastIndexOf('}');
     if (start === -1 || end === -1) {
       return res.status(500).json({ message: 'Could not parse a result from the model.' });
     }
 
-    const diag = JSON.parse(textBlock.text.slice(start, end + 1));
+    const diag = JSON.parse(textBlock.slice(start, end + 1));
 
     // Shape it EXACTLY to match the DiagnosisOutput GraphQL type —
     // Hasura will reject the response if a required field is missing.
@@ -84,5 +90,7 @@ app.post('/hasura/diagnose', async (req, res) => {
   }
 });
 
-const PORT = process.env.HASURA_HANDLER_PORT || 3001;
-app.listen(PORT, () => console.log(`Hasura Action handler running at http://localhost:${PORT}`));
+app.get('/', (req, res) => res.send('Disease Detector backend is running.'));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`Hasura Action handler running on port ${PORT}`));
