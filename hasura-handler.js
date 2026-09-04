@@ -26,9 +26,9 @@ app.post('/hasura/diagnose', async (req, res) => {
       return res.status(400).json({ message: 'Server is missing GEMINI_API_KEY.' });
     }
 
-    // Gemini's generateContent endpoint (free tier: gemini-2.5-flash)
+    // Gemini's generateContent endpoint (free tier: gemini-3.6-flash)
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
