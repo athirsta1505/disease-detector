@@ -23,7 +23,7 @@ app.post('/hasura/diagnose', async (req, res) => {
     }
 
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ message: 'Server is missing GEMINI_API_KEY.' });
+      return res.status(400).json({ message: 'Server is missing GEMINI_API_KEY.' });
     }
 
     // Gemini's generateContent endpoint (free tier: gemini-1.5-flash)
@@ -47,7 +47,7 @@ app.post('/hasura/diagnose', async (req, res) => {
 
     if (!response.ok) {
       console.error('Gemini API error:', data);
-      return res.status(500).json({ message: (data.error && data.error.message) || 'The AI service returned an error.' });
+      return res.status(400).json({ message: (data.error && data.error.message) || 'The AI service returned an error.' });
     }
 
     const textBlock = data.candidates &&
@@ -59,13 +59,13 @@ app.post('/hasura/diagnose', async (req, res) => {
 
     if (!textBlock) {
       console.error('Unexpected Gemini response shape:', JSON.stringify(data));
-      return res.status(500).json({ message: 'No diagnosis text came back from the model.' });
+      return res.status(400).json({ message: 'No diagnosis text came back from the model.' });
     }
 
     const start = textBlock.indexOf('{');
     const end = textBlock.lastIndexOf('}');
     if (start === -1 || end === -1) {
-      return res.status(500).json({ message: 'Could not parse a result from the model.' });
+      return res.status(400).json({ message: 'Could not parse a result from the model.' });
     }
 
     const diag = JSON.parse(textBlock.slice(start, end + 1));
@@ -86,7 +86,7 @@ app.post('/hasura/diagnose', async (req, res) => {
 
   } catch (err) {
     console.error('Hasura diagnose handler crashed:', err);
-    res.status(500).json({ message: 'Server error while running the diagnosis.' });
+    res.status(400).json({ message: 'Server error while running the diagnosis.' });
   }
 });
 
