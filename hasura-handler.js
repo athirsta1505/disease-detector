@@ -105,7 +105,7 @@ app.post('/hasura/diagnose', async (req, res) => {
 // Called directly by chatbot.html's fetch("/api/chat") — NOT through Hasura.
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, history } = req.body || {};
+    const { message, history, lang } = req.body || {};
 
     if (!message || !message.trim()) {
       return res.status(400).json({ error: { message: 'Missing message.' } });
@@ -119,11 +119,21 @@ app.post('/api/chat', async (req, res) => {
       ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
       : '';
 
+    const languageRule = lang === 'ta'
+      ? `2. The app's language toggle is set to TAMIL. You MUST write your ENTIRE reply in the Tamil language, using Tamil (தமிழ்) script only — regardless of what script the farmer typed in (English, Tanglish, or Tamil). Do not mix in English sentences, and do not reply in Tanglish.`
+      : lang === 'en'
+      ? `2. The app's language toggle is set to ENGLISH. You MUST write your ENTIRE reply in plain English — regardless of what script the farmer typed in.`
+      : `2. Match the farmer's exact language STYLE from their latest message:
+   - If they wrote in pure English → reply in pure English.
+   - If they wrote in Tamil script (தமிழ் எழுத்துக்கள்) → reply entirely in Tamil script.
+   - If they wrote in "Tanglish" (Tamil words spelled out using English/Latin letters, e.g. "eppadi irukeenga", "enna panna venum") → reply in that SAME Tanglish style — Tamil words in Latin letters, casual and easy to read, NOT in Tamil script and NOT in formal English.
+   Do not switch styles on your own; mirror exactly what the farmer used.`;
+
     const systemPrompt = `You are "AgriNova Assistant" (AgriAssist AI), a friendly, knowledgeable agricultural expert chatbot for a farming app. You help farmers with questions about crops, plant diseases, pests, fertilizers, irrigation, soil health, weather-related farming decisions, market/harvest timing, and general farming best practices.
 
 RULES:
 1. Only answer questions related to agriculture, farming, crops, plants, livestock basics, or the AgriNova app itself. If the farmer asks something completely unrelated (e.g. politics, entertainment, coding), politely say you can only help with farming and agriculture topics, and steer back.
-2. Reply in the SAME language the farmer used in their latest message (English or Tamil — match their language naturally; if they wrote in Tamil script, reply in Tamil).
+${languageRule}
 3. Keep answers practical, concise, and easy for a farmer to act on — prefer short paragraphs or bullet-style steps over long essays.
 4. If you're not fully certain about something (e.g. exact chemical dosages, local regulations), say so and suggest confirming with a local agricultural extension officer.
 5. Be warm and encouraging in tone, like a helpful local agricultural officer.
