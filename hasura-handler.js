@@ -158,6 +158,58 @@ AgriNova Assistant:`;
   }
 });
 
+/* ===================== CHATBOT WITH PHOTO ATTACHMENT ===================== */
+// Called when the farmer attaches a photo in the chat ("+" menu → Add photo).
+// Reuses the same Gemini vision capability as the disease detector, but lets
+// the farmer ask a free-form question about the photo instead of a fixed
+// diagnosis format.
+app.post('/api/chat-image', async (req, res) => {
+  try {
+    const { message, image, mediaType, history } = req.body || {};
+
+    if (!image || !mediaType) {
+      return res.status(400).json({ error: { message: 'Missing image or mediaType.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    const historyText = Array.isArray(history) && history.length
+      ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
+      : '';
+
+    const userMessage = message && message.trim() ? message.trim() : 'What can you tell me about this photo? (No specific question was given — describe what you see and anything relevant to a farmer.)';
+
+    const systemPrompt = `You are "AgriNova Assistant", a friendly, knowledgeable agricultural expert chatbot for a farming app. The farmer has attached a photo along with their message. Look at the photo carefully and answer helpfully — this could be a crop, leaf, pest, soil, equipment, or anything farming-related.
+
+RULES:
+1. Only discuss agriculture, farming, crops, plants, pests, soil, or the AgriNova app itself. If the photo or question is unrelated to farming, politely say so.
+2. Match the farmer's language/style from their message (English, Tamil script, or Tanglish) — mirror exactly what they used. If no text was given, reply in English.
+3. FORMATTING: Plain conversational text, no markdown symbols (no ###, no **). Use simple dash "-" bullets only if listing steps, and keep it short and skimmable.
+4. Be warm and practical, like a helpful local agricultural officer. If unsure, say so and suggest a local expert.
+
+${historyText}Farmer (with attached photo): ${userMessage}
+AgriNova Assistant:`;
+
+    let text;
+    try {
+      text = await callGemini([
+        { text: systemPrompt },
+        { inline_data: { mime_type: mediaType, data: image } }
+      ]);
+    } catch (e) {
+      console.error('Gemini API error (chat-image):', e);
+      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+    }
+
+    res.json({ reply: text.trim() });
+
+  } catch (err) {
+    console.error('Chat-image handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while analyzing the photo.' } });
+  }
+});
+
 app.get('/', (req, res) => res.send('AgriNova backend is running.'));
 
 const PORT = process.env.PORT || 3001;
