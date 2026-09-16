@@ -1,11 +1,13 @@
-// AgriNova backend — handles TWO things:
+// AgriNova backend — handles:
 //   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision)
 //   2. /api/chat        — agriculture chatbot, called DIRECTLY by chatbot.html (Gemini text)
+//   3. /api/chat-image  — chatbot with a photo attached (Gemini vision)
+//   4. /api/schemes     — government agriculture schemes, called DIRECTLY by scheme.html
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
-// error paths return 400. /api/chat is called directly by the browser (not
-// through Hasura) so it can use normal REST status codes.
+// error paths return 400. The other routes are called directly by the
+// browser (not through Hasura) so they can use normal REST status codes.
 
 require('dotenv').config();
 const express = require('express');
@@ -13,8 +15,8 @@ const app = express();
 
 app.use(express.json({ limit: '15mb' }));
 
-// CORS: the chatbot page (served from a different origin, e.g. a local
-// Live Server or another host) needs permission to call this backend.
+// CORS: pages served from a different origin (e.g. a local Live Server
+// or another host) need permission to call this backend.
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -208,6 +210,53 @@ AgriNova Assistant:`;
     console.error('Chat-image handler crashed:', err);
     res.status(400).json({ error: { message: 'Server error while analyzing the photo.' } });
   }
+});
+
+/* ========================= GOVERNMENT SCHEMES (direct REST) ========================= */
+// Called directly by scheme.html's fetch("/api/schemes") — NOT through Hasura,
+// and doesn't use Gemini either. Static list only — no live scraping, so
+// no extra dependency (cheerio) is needed.
+const schemes = [
+  {
+    name: "PM-KISAN Samman Nidhi",
+    category: "central",
+    benefits: "Eligible farmer families receive financial assistance of ₹6,000 per year.",
+    eligibility: "Eligible landholding farmer families.",
+    documents: "Aadhaar, bank account details and land records.",
+    link: "https://pmkisan.gov.in/"
+  },
+  {
+    name: "Tamil Nadu Agriculture Schemes",
+    category: "tamilnadu",
+    benefits: "Latest agricultural schemes and support from Tamil Nadu Agriculture Department.",
+    eligibility: "Eligible Tamil Nadu farmers.",
+    documents: "Farmer ID, Aadhaar, land and required documents.",
+    link: "https://www.tnagrisnet.tn.gov.in/home/schemes/"
+  },
+  {
+    name: "Uzhavan Scheme",
+    category: "tamilnadu",
+    benefits: "Agricultural services and scheme-related information for farmers.",
+    eligibility: "Tamil Nadu farmers.",
+    documents: "Required farmer and land-related details.",
+    link: "https://www.tnagrisnet.tn.gov.in/people_app/GoScheme"
+  },
+  {
+    name: "Agricultural Engineering Subsidy Schemes",
+    category: "subsidy",
+    benefits: "Subsidy support for eligible agricultural machinery and activities.",
+    eligibility: "Eligible farmers according to scheme guidelines.",
+    documents: "Aadhaar and required farmer and land documents.",
+    link: "https://aed.tn.gov.in/en/individual-based-subsidy-schemes/"
+  }
+];
+
+app.get('/api/schemes', (req, res) => {
+  res.json({
+    lastUpdated: new Date().toLocaleString(),
+    schemes: schemes,
+    officialUpdates: []
+  });
 });
 
 app.get('/', (req, res) => res.send('AgriNova backend is running.'));
