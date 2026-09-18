@@ -1,13 +1,11 @@
-// AgriNova backend — handles:
+// AgriNova backend — handles TWO things:
 //   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision)
 //   2. /api/chat        — agriculture chatbot, called DIRECTLY by chatbot.html (Gemini text)
-//   3. /api/chat-image  — chatbot with a photo attached (Gemini vision)
-//   4. /api/schemes     — government agriculture schemes, called DIRECTLY by scheme.html
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
-// error paths return 400. The other routes are called directly by the
-// browser (not through Hasura) so they can use normal REST status codes.
+// error paths return 400. /api/chat is called directly by the browser (not
+// through Hasura) so it can use normal REST status codes.
 
 require('dotenv').config();
 const express = require('express');
@@ -15,8 +13,8 @@ const app = express();
 
 app.use(express.json({ limit: '15mb' }));
 
-// CORS: pages served from a different origin (e.g. a local Live Server
-// or another host) need permission to call this backend.
+// CORS: the chatbot page (served from a different origin, e.g. a local
+// Live Server or another host) needs permission to call this backend.
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -28,13 +26,16 @@ app.use((req, res, next) => {
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-3.6-flash';
 
-async function callGemini(parts) {
+async function callGemini(parts, maxTokens = 700) {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }] })
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { maxOutputTokens: maxTokens }
+      })
     }
   );
   const data = await response.json();
@@ -71,7 +72,7 @@ app.post('/hasura/diagnose', async (req, res) => {
       text = await callGemini([
         { text: prompt },
         { inline_data: { mime_type: mediaType, data: image } }
-      ]);
+      ], 900);
     } catch (e) {
       console.error('Gemini API error (diagnose):', e);
       return res.status(400).json({ message: e.message || 'The AI service returned an error.' });
@@ -140,13 +141,14 @@ ${languageRule}
 4. If you're not fully certain about something (e.g. exact chemical dosages, local regulations), say so and suggest confirming with a local agricultural extension officer.
 5. Be warm and encouraging in tone, like a helpful local agricultural officer.
 6. FORMATTING: Write in plain conversational text, like a text message. Do NOT use markdown syntax — no "###" headings, no "**bold**" asterisks, no numbered "1." lists. If you need to list a few steps, put each one on its own line starting with a simple dash "-", and keep the whole reply to a few short lines or a short paragraph. Avoid long essays; keep it skimmable on a small phone screen.
+7. LENGTH: Keep replies SHORT by default — 2 to 5 sentences, or up to 5 short dash-bullet lines if listing steps. Only go longer if the farmer explicitly asks for more detail (e.g. "explain in detail", "give me everything").
 
 ${historyText}Farmer: ${message}
 AgriNova Assistant:`;
 
     let text;
     try {
-      text = await callGemini([{ text: systemPrompt }]);
+      text = await callGemini([{ text: systemPrompt }], 350);
     } catch (e) {
       console.error('Gemini API error (chat):', e);
       return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
@@ -198,7 +200,7 @@ AgriNova Assistant:`;
       text = await callGemini([
         { text: systemPrompt },
         { inline_data: { mime_type: mediaType, data: image } }
-      ]);
+      ], 400);
     } catch (e) {
       console.error('Gemini API error (chat-image):', e);
       return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
@@ -212,51 +214,101 @@ AgriNova Assistant:`;
   }
 });
 
-/* ========================= GOVERNMENT SCHEMES (direct REST) ========================= */
-// Called directly by scheme.html's fetch("/api/schemes") — NOT through Hasura,
-// and doesn't use Gemini either. Static list only — no live scraping, so
-// no extra dependency (cheerio) is needed.
-const schemes = [
-  {
-    name: "PM-KISAN Samman Nidhi",
-    category: "central",
-    benefits: "Eligible farmer families receive financial assistance of ₹6,000 per year.",
-    eligibility: "Eligible landholding farmer families.",
-    documents: "Aadhaar, bank account details and land records.",
-    link: "https://pmkisan.gov.in/"
-  },
-  {
-    name: "Tamil Nadu Agriculture Schemes",
-    category: "tamilnadu",
-    benefits: "Latest agricultural schemes and support from Tamil Nadu Agriculture Department.",
-    eligibility: "Eligible Tamil Nadu farmers.",
-    documents: "Farmer ID, Aadhaar, land and required documents.",
-    link: "https://www.tnagrisnet.tn.gov.in/home/schemes/"
-  },
-  {
-    name: "Uzhavan Scheme",
-    category: "tamilnadu",
-    benefits: "Agricultural services and scheme-related information for farmers.",
-    eligibility: "Tamil Nadu farmers.",
-    documents: "Required farmer and land-related details.",
-    link: "https://www.tnagrisnet.tn.gov.in/people_app/GoScheme"
-  },
-  {
-    name: "Agricultural Engineering Subsidy Schemes",
-    category: "subsidy",
-    benefits: "Subsidy support for eligible agricultural machinery and activities.",
-    eligibility: "Eligible farmers according to scheme guidelines.",
-    documents: "Aadhaar and required farmer and land documents.",
-    link: "https://aed.tn.gov.in/en/individual-based-subsidy-schemes/"
-  }
-];
+/* ===================== GOVERNMENT SCHEMES (search-grounded) ===================== */
+// Cached in memory so we don't call Gemini on every single page load —
+// refreshed at most once every 6 hours.
+let schemesCache = { data: null, updatedAt: 0 };
+const SCHEMES_CACHE_TTL = 3 * 60 * 60 * 1000;
 
-app.get('/api/schemes', (req, res) => {
-  res.json({
-    lastUpdated: new Date().toLocaleString(),
-    schemes: schemes,
-    officialUpdates: []
-  });
+const SCHEMES_PROMPT = `You are a research assistant helping Indian farmers. List CURRENT Indian government agricultural schemes relevant to farmers — covering Central Government schemes, Tamil Nadu state government schemes, and subsidy programs.
+
+Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
+{
+  "schemes": [
+    {
+      "name": "scheme name",
+      "benefits": "1-2 sentence summary of benefits",
+      "eligibility": "1-2 sentence summary of who qualifies",
+      "documents": "short comma-separated list of required documents",
+      "link": "official government URL for this scheme",
+      "category": "central" | "tamilnadu" | "subsidy"
+    }
+  ],
+  "officialUpdates": [
+    { "title": "short headline of a recent official announcement", "link": "official URL" }
+  ]
+}
+
+Include 20 to 25 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
+
+async function fetchSchemesWithSearch() {
+  // Attempt 1: with Google Search grounding, for genuinely current results.
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: SCHEMES_PROMPT }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: 4500 }
+      })
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    const err = new Error((data.error && data.error.message) || 'Search-grounded request failed.');
+    err.wasGrounded = true;
+    throw err;
+  }
+  const text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('No text came back from the model.');
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('Could not parse schemes JSON.');
+  const parsed = JSON.parse(text.slice(start, end + 1));
+  parsed.grounded = true;
+  return parsed;
+}
+
+app.get('/api/schemes', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (schemesCache.data && (now - schemesCache.updatedAt) < SCHEMES_CACHE_TTL) {
+      return res.json(schemesCache.data);
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    let parsed;
+    try {
+      parsed = await fetchSchemesWithSearch();
+    } catch (groundedErr) {
+      // Fallback: plain generation without search grounding (e.g. if the
+      // free tier doesn't support the search tool). Less "live", but still
+      // useful — flagged clearly for the frontend to show a disclaimer.
+      console.error('Grounded schemes fetch failed, falling back:', groundedErr.message);
+      const text = await callGemini([{ text: SCHEMES_PROMPT }], 4500);
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) {
+        return res.status(400).json({ error: { message: 'Could not fetch scheme data.' } });
+      }
+      parsed = JSON.parse(text.slice(start, end + 1));
+      parsed.grounded = false;
+    }
+
+    parsed.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    schemesCache = { data: parsed, updatedAt: now };
+    res.json(parsed);
+
+  } catch (err) {
+    console.error('Schemes handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while fetching schemes.' } });
+  }
 });
 
 app.get('/', (req, res) => res.send('AgriNova backend is running.'));
