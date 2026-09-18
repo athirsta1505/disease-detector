@@ -239,7 +239,7 @@ Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
   ]
 }
 
-Include 15 to 18 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
+Include 10 to 12 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
 
 // Large scheme lists sometimes get cut off mid-response (token limit hit
 // mid-array). This tries a normal parse first, and if that fails, trims
@@ -274,33 +274,26 @@ function parseSchemesJson(text) {
   return JSON.parse(repaired + suffix);
 }
 
-async function fetchSchemesWithSearch() {
-  // Attempt 1: with Google Search grounding, for genuinely current results.
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: SCHEMES_PROMPT }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 8000 }
-      })
+// Small delay helper for retries.
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchSchemesPlain() {
+  // Retries once on transient errors (e.g. "model is currently experiencing
+  // high demand"), since those usually succeed a moment later.
+  let lastErr;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const text = await callGemini([{ text: SCHEMES_PROMPT }], 3000);
+      const parsed = parseSchemesJson(text);
+      parsed.grounded = false;
+      return parsed;
+    } catch (e) {
+      lastErr = e;
+      console.error(`Schemes fetch attempt ${attempt} failed:`, e.message);
+      if (attempt < 2) await sleep(2000);
     }
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    const err = new Error((data.error && data.error.message) || 'Search-grounded request failed.');
-    err.wasGrounded = true;
-    throw err;
   }
-  const text = data.candidates && data.candidates[0] && data.candidates[0].content &&
-    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text;
-  if (!text) throw new Error('No text came back from the model.');
-  const parsed = parseSchemesJson(text);
-  parsed.grounded = true;
-  return parsed;
+  throw lastErr;
 }
 
 app.get('/api/schemes', async (req, res) => {
@@ -315,26 +308,15 @@ app.get('/api/schemes', async (req, res) => {
 
     let parsed;
     try {
-      parsed = await fetchSchemesWithSearch();
-    } catch (groundedErr) {
-      // Fallback: plain generation without search grounding (e.g. if the
-      // free tier doesn't support the search tool). Less "live", but still
-      // useful — flagged clearly for the frontend to show a disclaimer.
-      console.error('Grounded schemes fetch failed, falling back:', groundedErr.message);
-      let text;
-      try {
-        text = await callGemini([{ text: SCHEMES_PROMPT }], 8000);
-      } catch (e2) {
-        console.error('Fallback schemes fetch also failed:', e2.message);
-        return res.status(400).json({ error: { message: e2.message || 'Could not fetch scheme data.' } });
+      parsed = await fetchSchemesPlain();
+    } catch (e) {
+      console.error('Schemes fetch failed after retry:', e.message);
+      // If we have a stale cached copy, serve that rather than failing —
+      // an older list beats no list at all.
+      if (schemesCache.data) {
+        return res.json(schemesCache.data);
       }
-      try {
-        parsed = parseSchemesJson(text);
-      } catch (parseErr) {
-        console.error('Could not parse schemes JSON:', parseErr.message);
-        return res.status(400).json({ error: { message: 'Could not parse scheme data. Please try again.' } });
-      }
-      parsed.grounded = false;
+      return res.status(400).json({ error: { message: e.message || 'Could not fetch scheme data. Please try again in a moment.' } });
     }
 
     parsed.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
