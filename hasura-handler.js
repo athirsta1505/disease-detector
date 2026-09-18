@@ -239,7 +239,40 @@ Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
   ]
 }
 
-Include 20 to 25 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
+Include 15 to 18 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
+
+// Large scheme lists sometimes get cut off mid-response (token limit hit
+// mid-array). This tries a normal parse first, and if that fails, trims
+// back to the last complete object and closes whatever brackets are still
+// open — so the farmer sees a slightly shorter (but valid) list instead of
+// a hard error.
+function parseSchemesJson(text) {
+  const start = text.indexOf('{');
+  if (start === -1) throw new Error('No JSON object found in response.');
+  const jsonStr = text.slice(start);
+
+  const end = jsonStr.lastIndexOf('}');
+  if (end !== -1) {
+    try {
+      return JSON.parse(jsonStr.slice(0, end + 1));
+    } catch (e) { /* fall through to repair */ }
+  }
+
+  const lastCompleteObjEnd = Math.max(jsonStr.lastIndexOf('},'), jsonStr.lastIndexOf('}\n'), jsonStr.lastIndexOf('} '));
+  if (lastCompleteObjEnd === -1) throw new Error('Could not parse schemes JSON.');
+
+  let repaired = jsonStr.slice(0, lastCompleteObjEnd + 1);
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+
+  let suffix = '';
+  for (let i = 0; i < (openBrackets - closeBrackets); i++) suffix += ']';
+  for (let i = 0; i < (openBraces - closeBraces); i++) suffix += '}';
+
+  return JSON.parse(repaired + suffix);
+}
 
 async function fetchSchemesWithSearch() {
   // Attempt 1: with Google Search grounding, for genuinely current results.
@@ -251,7 +284,7 @@ async function fetchSchemesWithSearch() {
       body: JSON.stringify({
         contents: [{ parts: [{ text: SCHEMES_PROMPT }] }],
         tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 4500 }
+        generationConfig: { maxOutputTokens: 8000 }
       })
     }
   );
@@ -265,10 +298,7 @@ async function fetchSchemesWithSearch() {
     data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
     data.candidates[0].content.parts[0].text;
   if (!text) throw new Error('No text came back from the model.');
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('Could not parse schemes JSON.');
-  const parsed = JSON.parse(text.slice(start, end + 1));
+  const parsed = parseSchemesJson(text);
   parsed.grounded = true;
   return parsed;
 }
@@ -291,13 +321,19 @@ app.get('/api/schemes', async (req, res) => {
       // free tier doesn't support the search tool). Less "live", but still
       // useful — flagged clearly for the frontend to show a disclaimer.
       console.error('Grounded schemes fetch failed, falling back:', groundedErr.message);
-      const text = await callGemini([{ text: SCHEMES_PROMPT }], 4500);
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
-      if (start === -1 || end === -1) {
-        return res.status(400).json({ error: { message: 'Could not fetch scheme data.' } });
+      let text;
+      try {
+        text = await callGemini([{ text: SCHEMES_PROMPT }], 8000);
+      } catch (e2) {
+        console.error('Fallback schemes fetch also failed:', e2.message);
+        return res.status(400).json({ error: { message: e2.message || 'Could not fetch scheme data.' } });
       }
-      parsed = JSON.parse(text.slice(start, end + 1));
+      try {
+        parsed = parseSchemesJson(text);
+      } catch (parseErr) {
+        console.error('Could not parse schemes JSON:', parseErr.message);
+        return res.status(400).json({ error: { message: 'Could not parse scheme data. Please try again.' } });
+      }
       parsed.grounded = false;
     }
 
