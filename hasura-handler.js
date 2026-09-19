@@ -214,11 +214,14 @@ AgriNova Assistant:`;
   }
 });
 
-/* ===================== GOVERNMENT SCHEMES (search-grounded) ===================== */
-// Cached in memory so we don't call Gemini on every single page load —
-// refreshed at most once every 6 hours.
+/* ===================== GOVERNMENT SCHEMES ===================== */
+// Cached for 24 hours — this keeps page loads fast for everyone, and means
+// we only attempt the (quota-limited) Google Search grounding once a day,
+// which is far less likely to hit the free-tier quota than trying on every
+// page load. If grounding fails for any reason, we fall back immediately
+// to a plain (non-grounded) list so the page never shows an empty error.
 let schemesCache = { data: null, updatedAt: 0 };
-const SCHEMES_CACHE_TTL = 3 * 60 * 60 * 1000;
+const SCHEMES_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 const SCHEMES_PROMPT = `You are a research assistant helping Indian farmers. List CURRENT Indian government agricultural schemes relevant to farmers — covering Central Government schemes, Tamil Nadu state government schemes, and subsidy programs.
 
@@ -239,7 +242,7 @@ Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
   ]
 }
 
-Include 10 to 12 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, etc. where relevant to farmers) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL.`;
+Include 18 to 22 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in, myscheme.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, horticulture, etc.) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL. If unsure of the exact page URL for a scheme, use "https://www.myscheme.gov.in" instead of guessing.`;
 
 // Large scheme lists sometimes get cut off mid-response (token limit hit
 // mid-array). This tries a normal parse first, and if that fails, trims
@@ -274,8 +277,35 @@ function parseSchemesJson(text) {
   return JSON.parse(repaired + suffix);
 }
 
-// Small delay helper for retries.
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchSchemesGrounded() {
+  // One attempt only — grounding either works or hits quota; retrying a
+  // quota error just wastes time.
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: SCHEMES_PROMPT }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: 6000 }
+      })
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || 'Search-grounded request failed.');
+  }
+  const text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('No text came back from the model.');
+  const parsed = parseSchemesJson(text);
+  parsed.grounded = true;
+  return parsed;
+}
 
 async function fetchSchemesPlain() {
   // Retries once on transient errors (e.g. "model is currently experiencing
@@ -283,7 +313,7 @@ async function fetchSchemesPlain() {
   let lastErr;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const text = await callGemini([{ text: SCHEMES_PROMPT }], 3000);
+      const text = await callGemini([{ text: SCHEMES_PROMPT }], 6000);
       const parsed = parseSchemesJson(text);
       parsed.grounded = false;
       return parsed;
@@ -308,15 +338,20 @@ app.get('/api/schemes', async (req, res) => {
 
     let parsed;
     try {
-      parsed = await fetchSchemesPlain();
-    } catch (e) {
-      console.error('Schemes fetch failed after retry:', e.message);
-      // If we have a stale cached copy, serve that rather than failing —
-      // an older list beats no list at all.
-      if (schemesCache.data) {
-        return res.json(schemesCache.data);
+      parsed = await fetchSchemesGrounded();
+    } catch (groundedErr) {
+      console.error('Grounded schemes fetch failed, falling back:', groundedErr.message);
+      try {
+        parsed = await fetchSchemesPlain();
+      } catch (e) {
+        console.error('Schemes fetch failed after retry:', e.message);
+        // If we have a stale cached copy, serve that rather than failing —
+        // an older list beats no list at all.
+        if (schemesCache.data) {
+          return res.json(schemesCache.data);
+        }
+        return res.status(400).json({ error: { message: e.message || 'Could not fetch scheme data. Please try again in a moment.' } });
       }
-      return res.status(400).json({ error: { message: e.message || 'Could not fetch scheme data. Please try again in a moment.' } });
     }
 
     parsed.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
