@@ -334,6 +334,67 @@ app.get('/api/schemes', async (req, res) => {
   }
 });
 
+/* ===================== FERTILIZER RECOMMENDATION (AI-powered) ===================== */
+app.post('/api/fertilizer', async (req, res) => {
+  try {
+    const { crop, soil, n, p, k, lang } = req.body || {};
+
+    if (!crop || !soil || !n || !p || !k) {
+      return res.status(400).json({ error: { message: 'Missing crop, soil, or nutrient levels.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    const langLine = lang === 'ta'
+      ? 'Write EVERY text field entirely in the TAMIL language (தமிழ் script).'
+      : 'Write every text field in English.';
+
+    const prompt = `You are an expert agronomist advising an Indian farmer through a fertilizer-management app.
+
+Field details:
+- Crop: ${crop}
+- Soil type: ${soil}
+- Nitrogen (N) status: ${n}
+- Phosphorus (P) status: ${p}
+- Potassium (K) status: ${k}
+
+Give a specific, practical fertilizer recommendation for exactly this combination of crop, soil type, and nutrient status — the soil type should meaningfully affect your advice (e.g. sandy soil leaches nutrients faster, clay soil retains them longer, black/red soils differ in nutrient-holding capacity).
+
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences, no preamble) in exactly this shape:
+{
+  "fertilizerName": "the primary fertilizer or combination to use (e.g. 'Urea + MOP' or 'NPK 19:19:19')",
+  "dosage": "a practical dosage guideline, e.g. per acre or per hectare",
+  "application": "2-3 sentences on how and when to apply it, considering the soil type given",
+  "stage": "the current growth stage this recommendation targets, and what to watch for next",
+  "tip": "one extra practical tip specific to this soil type and crop combination"
+}`;
+
+    let text;
+    try {
+      text = await callGemini([{ text: prompt }], 500);
+    } catch (e) {
+      console.error('Gemini API error (fertilizer):', e);
+      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+    }
+
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1) {
+      return res.status(400).json({ error: { message: 'Could not parse the recommendation.' } });
+    }
+
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    res.json(parsed);
+
+  } catch (err) {
+    console.error('Fertilizer handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while generating the recommendation.' } });
+  }
+});
+
 app.get('/', (req, res) => res.send('AgriNova backend is running.'));
 
 const PORT = process.env.PORT || 3001;
