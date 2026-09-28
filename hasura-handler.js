@@ -1,6 +1,10 @@
-// AgriNova backend — handles TWO things:
+// AgriNova backend — handles:
 //   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision)
 //   2. /api/chat        — agriculture chatbot, called DIRECTLY by chatbot.html (Gemini text)
+//   3. /api/chat-image  — chatbot with photo attachment
+//   4. /api/schemes     — government schemes list
+//   5. /api/fertilizer  — fertilizer recommendation
+//   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
@@ -392,6 +396,225 @@ Respond ONLY with raw JSON (no markdown fences, no preamble) in exactly this sha
   } catch (err) {
     console.error('Fertilizer handler crashed:', err);
     res.status(400).json({ error: { message: 'Server error while generating the recommendation.' } });
+  }
+});
+
+/* ===================== MARKET PRICE (live Agmarknet + AI fallback) ===================== */
+// Live mandi prices come from the official Agmarknet dataset on data.gov.in.
+// Seeds / fertilizers (and anything with no live data) fall back to a Gemini
+// estimate, clearly marked source: "ai" so the frontend can label it.
+const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY;
+const AGMARK_RESOURCE = '9ef84268-d588-465a-a308-a864a43d0070';
+
+// App crop name -> possible Agmarknet commodity names (tried in order)
+const AGMARK_NAMES = {
+  'Tomato': ['Tomato'],
+  'Onion': ['Onion'],
+  'Potato': ['Potato'],
+  'Carrot': ['Carrot'],
+  'Beetroot': ['Beetroot'],
+  'Cabbage': ['Cabbage'],
+  'Cauliflower': ['Cauliflower'],
+  'Brinjal': ['Brinjal'],
+  'Okra': ['Bhindi(Ladies Finger)'],
+  'Green Chilli': ['Green Chilli'],
+  'Drumstick': ['Drumstick'],
+  'Cucumber': ['Cucumbar(Kheera)'],
+  'Rice': ['Rice', 'Paddy(Dhan)(Common)'],
+  'Wheat': ['Wheat'],
+  'Maize': ['Maize'],
+  'Ragi': ['Ragi (Finger Millet)'],
+  'Bajra': ['Bajra(Pearl Millet/Cumbu)'],
+  'Sorghum': ['Jowar(Sorghum)'],
+  'Green Gram': ['Green Gram (Moong)(Whole)'],
+  'Black Gram': ['Black Gram (Urd Beans)(Whole)'],
+  'Red Gram': ['Arhar (Tur/Red Gram)(Whole)'],
+  'Bengal Gram': ['Bengal Gram(Gram)(Whole)'],
+  'Kidney Beans': ['Rajmash Beans', 'French Beans (Frasbean)'],
+  'Groundnut': ['Groundnut'],
+  'Soybean': ['Soyabean'],
+  'Sunflower': ['Sunflower'],
+  'Sesame': ['Sesamum(Sesame,Gingelly,Til)'],
+  'Mustard': ['Mustard'],
+  'Banana': ['Banana'],
+  'Mango': ['Mango'],
+  'Apple': ['Apple'],
+  'Orange': ['Orange'],
+  'Papaya': ['Papaya'],
+  'Guava': ['Guava'],
+  'Pomegranate': ['Pomegranate'],
+  'Watermelon': ['Water Melon'],
+  'Coconut': ['Coconut'],
+  'Turmeric': ['Turmeric'],
+  'Chilli': ['Dry Chillies', 'Green Chilli'],
+  'Ginger': ['Ginger(Green)', 'Ginger(Dry)'],
+  'Garlic': ['Garlic'],
+  'Pepper': ['Black pepper'],
+  'Cardamom': ['Cardamoms'],
+  'Cinnamon': ['Cinnamon']
+};
+
+const marketPriceCache = new Map();
+const PRICE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+async function fetchAgmark(state, commodity) {
+  const url = new URL(`https://api.data.gov.in/resource/${AGMARK_RESOURCE}`);
+  url.searchParams.set('api-key', DATA_GOV_API_KEY);
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('limit', '1000');
+  url.searchParams.set('filters[state.keyword]', state);
+  url.searchParams.set('filters[commodity]', commodity);
+
+  const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`Agmarknet API returned ${r.status}`);
+  const data = await r.json();
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+function parseAgmarkDate(s) { // "28/09/2026" -> timestamp
+  const [d, m, y] = String(s || '').split('/').map(Number);
+  return y ? new Date(y, m - 1, d).getTime() : 0;
+}
+
+function summarize(records) {
+  const mins = records.map(r => Number(r.min_price)).filter(n => n > 0);
+  const maxs = records.map(r => Number(r.max_price)).filter(n => n > 0);
+  const mods = records.map(r => Number(r.modal_price)).filter(n => n > 0);
+  if (!mins.length || !maxs.length || !mods.length) return null;
+  const avg = a => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  return { min: Math.min(...mins), max: Math.max(...maxs), modal: avg(mods) };
+}
+
+// Picks the best level: market -> district -> state. Uses only the latest date.
+function pickPrice(records, district, market) {
+  if (!records.length) return null;
+  const latest = Math.max(...records.map(r => parseAgmarkDate(r.arrival_date)));
+  const fresh = records.filter(r => parseAgmarkDate(r.arrival_date) === latest);
+  const date = fresh[0].arrival_date;
+  const low = s => String(s || '').toLowerCase().trim();
+
+  const base = low(market).replace(/\s*market$/, '').replace(/\s*central$/, '');
+  const byMarket = fresh.filter(r => {
+    const rm = low(r.market);
+    return rm && (rm.includes(base) || base.includes(rm));
+  });
+  let s = summarize(byMarket);
+  if (s) return { ...s, level: 'market', date };
+
+  const byDistrict = fresh.filter(r => low(r.district) === low(district));
+  s = summarize(byDistrict);
+  if (s) return { ...s, level: 'district', date };
+
+  s = summarize(fresh);
+  if (s) return { ...s, level: 'state', date };
+  return null;
+}
+
+function liveNote(level, date, market, district, state, ta) {
+  if (ta) {
+    const where = level === 'market' ? market : level === 'district' ? `${district} மாவட்ட சராசரி` : `${state} மாநில சராசரி`;
+    const extra = level === 'market' ? '' : ' (இந்த சந்தைக்கு இன்று தரவு இல்லை)';
+    return `அதிகாரப்பூர்வ Agmarknet நேரடி விலை (${date}) — ${where}${extra}. விலை ஒரு குவிண்டாலுக்கு.`;
+  }
+  const where = level === 'market' ? market : level === 'district' ? `${district} district average` : `${state} state average`;
+  const extra = level === 'market' ? '' : ' (no data for this market today)';
+  return `Official Agmarknet live mandi price (${date}) — ${where}${extra}. Price per quintal.`;
+}
+
+async function aiPriceEstimate({ state, district, market, crop, category, lang }) {
+  const langLine = lang === 'ta'
+    ? 'Write the "note" field in TAMIL (தமிழ் script).'
+    : 'Write the "note" field in English.';
+  const prompt = `You are an Indian agricultural market analyst. Estimate a realistic current price for this product in India.
+
+State: ${state}
+District: ${district}
+Market: ${market}
+Product: ${crop}
+Category: ${category || 'unknown'}
+
+Rules:
+- For crops/produce use Indian Rs per quintal.
+- For fertilizers use the Indian government-controlled retail rate per bag (e.g. Urea 45 kg bag) and set unit accordingly.
+- For seeds use a typical retail price per kg or per packet and set unit accordingly.
+- All prices are integers in rupees.
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
+{ "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "note": "short note saying this is an estimate, confirm with the local market" }`;
+
+  const text = await callGemini([{ text: prompt }], 600);
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if (s === -1 || e === -1) throw new Error('Could not parse the price estimate.');
+  const p = JSON.parse(text.slice(s, e + 1));
+  return {
+    min: Number(p.min) || null,
+    max: Number(p.max) || null,
+    modal: Number(p.modal) || null,
+    unit: p.unit || 'per quintal',
+    note: p.note || '',
+    source: 'ai'
+  };
+}
+
+app.post('/api/market-price', async (req, res) => {
+  try {
+    const { state, district, market, crop, category, lang } = req.body || {};
+    if (!state || !district || !market || !crop) {
+      return res.status(400).json({ error: { message: 'Missing state, district, market, or crop.' } });
+    }
+
+    const key = [state, district, market, crop, lang].join('|');
+    const cached = marketPriceCache.get(key);
+    if (cached && Date.now() - cached.at < PRICE_CACHE_TTL) return res.json(cached.data);
+
+    let result = null;
+
+    // 1) Live Agmarknet data (only for mandi commodities)
+    const names = AGMARK_NAMES[crop];
+    if (names && DATA_GOV_API_KEY) {
+      for (const name of names) {
+        try {
+          const records = await fetchAgmark(state, name);
+          const picked = pickPrice(records, district, market);
+          if (picked) {
+            result = {
+              min: picked.min,
+              max: picked.max,
+              modal: picked.modal,
+              unit: 'per quintal',
+              note: liveNote(picked.level, picked.date, market, district, state, lang === 'ta'),
+              source: 'live',
+              level: picked.level,
+              date: picked.date
+            };
+            break;
+          }
+        } catch (e) {
+          console.error(`Agmarknet fetch failed for ${name}:`, e.message);
+        }
+      }
+    }
+
+    // 2) Fallback: Gemini estimate (fertilizers, seeds, or no live data)
+    if (!result) {
+      if (!GEMINI_API_KEY) {
+        return res.status(400).json({ error: { message: 'No live data, and server is missing GEMINI_API_KEY.' } });
+      }
+      try {
+        result = await aiPriceEstimate({ state, district, market, crop, category, lang });
+      } catch (e) {
+        console.error('AI price estimate failed:', e.message);
+        return res.status(400).json({ error: { message: e.message || 'Could not fetch the price.' } });
+      }
+    }
+
+    marketPriceCache.set(key, { at: Date.now(), data: result });
+    res.json(result);
+
+  } catch (err) {
+    console.error('Market price handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while fetching the price.' } });
   }
 });
 
