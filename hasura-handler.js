@@ -59,6 +59,34 @@ async function callGemini(parts, maxTokens = 700) {
   return text;
 }
 
+/* Gemini WITH Google Search grounding — reads today's prices from the web.
+   (JSON mode can't be combined with search, so the caller parses the text.) */
+async function callGeminiGrounded(parts, maxTokens = 1000) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: maxTokens }
+      }),
+      signal: AbortSignal.timeout(30000)
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data.error && data.error.message) || 'Search-grounded request failed.');
+  }
+  const cand = data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts
+    ? cand.content.parts.map(p => p.text || '').join('')
+    : '';
+  if (!text) throw new Error('No text came back from the search-grounded model.');
+  return text;
+}
+
 /* ========================= DISEASE DIAGNOSIS (via Hasura) ========================= */
 app.post('/hasura/diagnose', async (req, res) => {
   try {
@@ -533,6 +561,43 @@ function liveNote(level, date, market, district, state, ta) {
   return `Official Agmarknet live mandi price (${date}) — ${where}${extra}. Price per quintal.`;
 }
 
+async function aiPriceSearch({ state, district, market, crop, lang }) {
+  const langLine = lang === 'ta'
+    ? 'Write the "note" field in TAMIL (தமிழ் script).'
+    : 'Write the "note" field in English.';
+  const today = new Date().toLocaleDateString('en-IN');
+  const prompt = `Today is ${today}. Use Google Search to find the LATEST wholesale mandi price (Agmarknet / APMC / market reports / news) for this product in India.
+
+Product: ${crop}
+Market: ${market}
+District: ${district}
+State: ${state}
+
+Rules:
+- Prefer the exact market; else the district; else the state average.
+- Use Indian Rs per quintal (100 kg). Convert if the source uses per kg (multiply by 100).
+- Only report numbers you actually found in a source. If you cannot find a recent price, set "found" to false and do NOT guess.
+- min <= modal <= max, all integers in rupees.
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
+{ "found": true, "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "priceDate": "date of the price", "where": "market/district/state the price is for", "note": "one short sentence naming the source and date" }`;
+
+  const text = await callGeminiGrounded([{ text: prompt }], 1000);
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  if (a === -1 || b === -1) throw new Error('Could not parse the searched price.');
+  const p = JSON.parse(text.slice(a, b + 1));
+  const min = Number(p.min), max = Number(p.max), modal = Number(p.modal);
+  if (!p.found || !(min > 0) || !(max > 0) || !(modal > 0) || min > modal || modal > max) return null;
+  return {
+    min, max, modal,
+    unit: p.unit || 'per quintal',
+    note: p.note || '',
+    date: p.priceDate || '',
+    source: 'search'
+  };
+}
+
 async function aiPriceEstimate({ state, district, market, crop, category, lang }) {
   const langLine = lang === 'ta'
     ? 'Write the "note" field in TAMIL (தமிழ் script).'
@@ -608,7 +673,16 @@ app.post('/api/market-price', async (req, res) => {
       }
     }
 
-    // 2) Fallback: Gemini estimate, with 1 retry
+    // 2) Gemini + Google Search: latest price read from the web
+    if (!result && GEMINI_API_KEY && AGMARK_NAMES[crop]) {
+      try {
+        result = await aiPriceSearch({ state, district, market, crop, lang });
+      } catch (e) {
+        console.error('Searched price failed:', e.message);
+      }
+    }
+
+    // 3) Fallback: plain Gemini estimate, with 1 retry
     if (!result && GEMINI_API_KEY) {
       for (let attempt = 1; attempt <= 2 && !result; attempt++) {
         try {
@@ -620,14 +694,14 @@ app.post('/api/market-price', async (req, res) => {
       }
     }
 
-    // 3) Everything failed: serve an older cached copy if we have one
+    // 4) Everything failed: serve an older cached copy if we have one
     if (!result) {
       if (cached) return res.json(cached.data);
       return res.status(400).json({ error: { message: 'Could not fetch the price right now.' } });
     }
 
     console.log(`market-price ${crop} @ ${state}/${district}: source=${result.source}${result.level ? ' level=' + result.level : ''}`);
-    marketPriceCache.set(key, { at: Date.now(), ttl: result.source === 'live' ? PRICE_CACHE_TTL : 5 * 60 * 1000, data: result });
+    marketPriceCache.set(key, { at: Date.now(), ttl: result.source === 'live' ? PRICE_CACHE_TTL : result.source === 'search' ? 15 * 60 * 1000 : 5 * 60 * 1000, data: result });
     res.json(result);
 
   } catch (err) {
