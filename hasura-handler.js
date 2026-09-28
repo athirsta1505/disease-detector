@@ -465,7 +465,7 @@ async function fetchAgmark(state, commodity) {
   url.searchParams.set('filters[state.keyword]', state);
   url.searchParams.set('filters[commodity]', commodity);
 
-  const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!r.ok) throw new Error(`Agmarknet API returned ${r.status}`);
   const data = await r.json();
   return Array.isArray(data.records) ? data.records : [];
@@ -543,7 +543,7 @@ ${langLine}
 Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
 { "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "note": "short note saying this is an estimate, confirm with the local market" }`;
 
-  const text = await callGemini([{ text: prompt }], 600);
+  const text = await callGemini([{ text: prompt }], 1000);
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
   if (s === -1 || e === -1) throw new Error('Could not parse the price estimate.');
   const p = JSON.parse(text.slice(s, e + 1));
@@ -570,43 +570,48 @@ app.post('/api/market-price', async (req, res) => {
 
     let result = null;
 
-    // 1) Live Agmarknet data (only for mandi commodities)
+    // 1) Live Agmarknet data — all commodity names tried IN PARALLEL
     const names = AGMARK_NAMES[crop];
     if (names && DATA_GOV_API_KEY) {
-      for (const name of names) {
+      const results = await Promise.all(names.map(async name => {
         try {
-          const records = await fetchAgmark(state, name);
-          const picked = pickPrice(records, district, market);
-          if (picked) {
-            result = {
-              min: picked.min,
-              max: picked.max,
-              modal: picked.modal,
-              unit: 'per quintal',
-              note: liveNote(picked.level, picked.date, market, district, state, lang === 'ta'),
-              source: 'live',
-              level: picked.level,
-              date: picked.date
-            };
-            break;
-          }
+          return pickPrice(await fetchAgmark(state, name), district, market);
         } catch (e) {
           console.error(`Agmarknet fetch failed for ${name}:`, e.message);
+          return null;
+        }
+      }));
+      const picked = results.find(Boolean);
+      if (picked) {
+        result = {
+          min: picked.min,
+          max: picked.max,
+          modal: picked.modal,
+          unit: 'per quintal',
+          note: liveNote(picked.level, picked.date, market, district, state, lang === 'ta'),
+          source: 'live',
+          level: picked.level,
+          date: picked.date
+        };
+      }
+    }
+
+    // 2) Fallback: Gemini estimate, with 1 retry
+    if (!result && GEMINI_API_KEY) {
+      for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+        try {
+          result = await aiPriceEstimate({ state, district, market, crop, category, lang });
+        } catch (e) {
+          console.error(`AI price estimate attempt ${attempt} failed:`, e.message);
+          if (attempt < 2) await sleep(1500);
         }
       }
     }
 
-    // 2) Fallback: Gemini estimate (fertilizers, seeds, or no live data)
+    // 3) Everything failed: serve an older cached copy if we have one
     if (!result) {
-      if (!GEMINI_API_KEY) {
-        return res.status(400).json({ error: { message: 'No live data, and server is missing GEMINI_API_KEY.' } });
-      }
-      try {
-        result = await aiPriceEstimate({ state, district, market, crop, category, lang });
-      } catch (e) {
-        console.error('AI price estimate failed:', e.message);
-        return res.status(400).json({ error: { message: e.message || 'Could not fetch the price.' } });
-      }
+      if (cached) return res.json(cached.data);
+      return res.status(400).json({ error: { message: 'Could not fetch the price right now.' } });
     }
 
     marketPriceCache.set(key, { at: Date.now(), data: result });
