@@ -458,17 +458,29 @@ const marketPriceCache = new Map();
 const PRICE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 async function fetchAgmark(state, commodity) {
-  const url = new URL(`https://api.data.gov.in/resource/${AGMARK_RESOURCE}`);
-  url.searchParams.set('api-key', DATA_GOV_API_KEY);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', '1000');
-  url.searchParams.set('filters[state.keyword]', state);
-  url.searchParams.set('filters[commodity]', commodity);
+  // The API accepts the state filter as "state.keyword" on some setups and
+  // plain "state" on others, so try both and use whichever returns rows.
+  let lastErr = null;
+  for (const field of ['state.keyword', 'state']) {
+    try {
+      const url = new URL(`https://api.data.gov.in/resource/${AGMARK_RESOURCE}`);
+      url.searchParams.set('api-key', DATA_GOV_API_KEY);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('limit', '1000');
+      url.searchParams.set(`filters[${field}]`, state);
+      url.searchParams.set('filters[commodity]', commodity);
 
-  const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error(`Agmarknet API returned ${r.status}`);
-  const data = await r.json();
-  return Array.isArray(data.records) ? data.records : [];
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) { lastErr = new Error(`Agmarknet API returned ${r.status}`); continue; }
+      const data = await r.json();
+      const records = Array.isArray(data.records) ? data.records : [];
+      if (records.length) return records;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return [];
 }
 
 function parseAgmarkDate(s) { // "28/09/2026" -> timestamp
@@ -566,7 +578,7 @@ app.post('/api/market-price', async (req, res) => {
 
     const key = [state, district, market, crop, lang].join('|');
     const cached = marketPriceCache.get(key);
-    if (cached && Date.now() - cached.at < PRICE_CACHE_TTL) return res.json(cached.data);
+    if (cached && Date.now() - cached.at < (cached.ttl || PRICE_CACHE_TTL)) return res.json(cached.data);
 
     let result = null;
 
@@ -614,13 +626,43 @@ app.post('/api/market-price', async (req, res) => {
       return res.status(400).json({ error: { message: 'Could not fetch the price right now.' } });
     }
 
-    marketPriceCache.set(key, { at: Date.now(), data: result });
+    console.log(`market-price ${crop} @ ${state}/${district}: source=${result.source}${result.level ? ' level=' + result.level : ''}`);
+    marketPriceCache.set(key, { at: Date.now(), ttl: result.source === 'live' ? PRICE_CACHE_TTL : 5 * 60 * 1000, data: result });
     res.json(result);
 
   } catch (err) {
     console.error('Market price handler crashed:', err);
     res.status(400).json({ error: { message: 'Server error while fetching the price.' } });
   }
+});
+
+/* Debug helper: open /api/price-debug?state=Tamil%20Nadu&crop=Tomato in the browser
+   to see exactly what Agmarknet returns and why live data is or isn't used. */
+app.get('/api/price-debug', async (req, res) => {
+  const state = req.query.state || 'Tamil Nadu';
+  const crop = req.query.crop || 'Tomato';
+  const names = AGMARK_NAMES[crop] || null;
+  const out = {
+    hasDataGovKey: !!DATA_GOV_API_KEY,
+    hasGeminiKey: !!GEMINI_API_KEY,
+    state, crop,
+    agmarknetNames: names,
+    tries: []
+  };
+  for (const name of (names || [])) {
+    try {
+      const recs = await fetchAgmark(state, name);
+      out.tries.push({
+        commodity: name,
+        records: recs.length,
+        latestDate: recs.length ? recs.map(r => r.arrival_date).sort().pop() : null,
+        sample: recs[0] || null
+      });
+    } catch (e) {
+      out.tries.push({ commodity: name, error: e.message });
+    }
+  }
+  res.json(out);
 });
 
 app.get('/', (req, res) => res.send('AgriNova backend is running.'));
