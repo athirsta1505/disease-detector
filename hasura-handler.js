@@ -5,6 +5,8 @@
 //   4. /api/schemes     — government schemes list
 //   5. /api/fertilizer  — fertilizer recommendation
 //   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
+//   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
+//   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
@@ -709,6 +711,490 @@ app.post('/api/market-price', async (req, res) => {
     res.status(400).json({ error: { message: 'Server error while fetching the price.' } });
   }
 });
+
+/* ===================== IRRIGATION ADVISOR (Open-Meteo weather + FAO-56 water balance + Gemini tips) ===================== */
+// Crop coefficients (Kc: initial / mid / late), max root depth (m), allowed depletion fraction (p) — FAO-56 approximate values.
+const IRR_CROPS = {
+  'Rice': { kc: [1.05, 1.2, 0.9], root: 0.5, p: 0.2 },
+  'Wheat': { kc: [0.4, 1.15, 0.4], root: 1.0 },
+  'Maize': { kc: [0.4, 1.2, 0.6], root: 1.0 },
+  'Ragi': { kc: [0.35, 1.0, 0.4], root: 0.8 },
+  'Sugarcane': { kc: [0.4, 1.25, 0.75], root: 1.2 },
+  'Cotton': { kc: [0.35, 1.15, 0.7], root: 1.2 },
+  'Groundnut': { kc: [0.4, 1.15, 0.6], root: 0.5 },
+  'Tomato': { kc: [0.6, 1.15, 0.8], root: 0.7 },
+  'Onion': { kc: [0.7, 1.05, 0.75], root: 0.3 },
+  'Potato': { kc: [0.5, 1.15, 0.75], root: 0.4 },
+  'Brinjal': { kc: [0.6, 1.05, 0.9], root: 0.7 },
+  'Okra': { kc: [0.5, 1.0, 0.7], root: 0.6 },
+  'Chilli': { kc: [0.6, 1.05, 0.9], root: 0.6 },
+  'Banana': { kc: [0.5, 1.1, 1.0], root: 0.6 },
+  'Coconut': { kc: [0.95, 1.0, 1.0], root: 1.0 },
+  'Turmeric': { kc: [0.5, 1.1, 0.7], root: 0.5 },
+  'Green Gram': { kc: [0.4, 1.05, 0.5], root: 0.5 },
+  'Black Gram': { kc: [0.4, 1.05, 0.5], root: 0.5 },
+  'Sunflower': { kc: [0.35, 1.15, 0.35], root: 0.8 },
+  'Cabbage': { kc: [0.7, 1.05, 0.95], root: 0.5 },
+  'Carrot': { kc: [0.7, 1.05, 0.95], root: 0.5 },
+  'Mango': { kc: [0.65, 0.85, 0.8], root: 1.2 }
+};
+// Volumetric water content at field capacity (fc) and wilting point (wp)
+const IRR_SOILS = {
+  sandy: { fc: 0.15, wp: 0.06 },
+  loamy: { fc: 0.27, wp: 0.12 },
+  clay:  { fc: 0.40, wp: 0.22 },
+  red:   { fc: 0.22, wp: 0.10 },
+  black: { fc: 0.42, wp: 0.24 }
+};
+const IRR_ROOT_FACTOR = { initial: 0.4, development: 0.7, mid: 1, late: 1 };
+const IRR_EFFICIENCY = { drip: 0.9, sprinkler: 0.75, flood: 0.55 };
+const LITRES_PER_MM_ACRE = 4046.86;
+
+const geoCache = new Map();
+const irrigationCache = new Map();
+const IRRIGATION_TTL = 30 * 60 * 1000;
+
+async function geocodePlace(district, state) {
+  const key = `${district}|${state}`;
+  if (geoCache.has(key)) return geoCache.get(key);
+
+  const tries = [district, String(district).replace(/^(North|South)\s+/i, ''), state];
+  for (const name of tries) {
+    if (!name) continue;
+    const u = new URL('https://geocoding-api.open-meteo.com/v1/search');
+    u.searchParams.set('name', name);
+    u.searchParams.set('count', '10');
+    u.searchParams.set('language', 'en');
+    u.searchParams.set('country_code', 'IN');
+    const r = await fetch(u, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) continue;
+    const j = await r.json();
+    const res = Array.isArray(j.results) ? j.results : [];
+    if (!res.length) continue;
+    const st = String(state || '').toLowerCase();
+    const best = res.find(x => String(x.admin1 || '').toLowerCase() === st) || res[0];
+    const out = { lat: best.latitude, lon: best.longitude, name: `${best.name}${best.admin1 ? ', ' + best.admin1 : ''}` };
+    geoCache.set(key, out);
+    return out;
+  }
+  throw new Error('Could not find this location. Please try "Use my location".');
+}
+
+async function fetchWeather(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('daily', 'et0_fao_evapotranspiration,precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min');
+  u.searchParams.set('hourly', 'soil_moisture_0_to_7cm,soil_moisture_7_to_28cm');
+  u.searchParams.set('current', 'temperature_2m,relative_humidity_2m,wind_speed_10m');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '7');
+
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.daily) throw new Error(j.reason || 'Weather service returned an error.');
+
+  const hr = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date())) % 24;
+  const a = j.hourly && j.hourly.soil_moisture_0_to_7cm ? j.hourly.soil_moisture_0_to_7cm[hr] : null;
+  const b = j.hourly && j.hourly.soil_moisture_7_to_28cm ? j.hourly.soil_moisture_7_to_28cm[hr] : null;
+  let theta = null;
+  if (a != null && b != null) theta = (7 * a + 21 * b) / 28;
+  else if (b != null) theta = b;
+  else if (a != null) theta = a;
+
+  const d = j.daily;
+  return {
+    current: j.current ? {
+      temp: j.current.temperature_2m,
+      humidity: j.current.relative_humidity_2m,
+      wind: j.current.wind_speed_10m
+    } : null,
+    soilTheta: theta,
+    daily: d.time.map((t, i) => ({
+      date: t,
+      tmax: d.temperature_2m_max[i],
+      tmin: d.temperature_2m_min[i],
+      rain: d.precipitation_sum[i] || 0,
+      rainProb: d.precipitation_probability_max ? (d.precipitation_probability_max[i] || 0) : 0,
+      et0: d.et0_fao_evapotranspiration[i] || 0
+    }))
+  };
+}
+
+// 7-day root-zone water balance. Irrigates when depletion passes the allowed limit
+// (and no significant rain is coming); refills to field capacity.
+function planIrrigation(w, o) {
+  const crop = IRR_CROPS[o.crop];
+  const soil = IRR_SOILS[o.soil];
+  const [k0, k1, k2] = crop.kc;
+  const kc = o.stage === 'initial' ? k0 : o.stage === 'development' ? (k0 + k1) / 2 : o.stage === 'late' ? k2 : k1;
+  const root = crop.root * IRR_ROOT_FACTOR[o.stage];
+  const taw = (soil.fc - soil.wp) * 1000 * root;      // total available water, mm
+  const raw = taw * (crop.p || 0.5);                  // readily available water, mm
+  const eff = IRR_EFFICIENCY[o.method];
+
+  let frac = null;
+  if (w.soilTheta != null) frac = Math.min(1, Math.max(0, (w.soilTheta - soil.wp) / (soil.fc - soil.wp)));
+  const estimated = frac === null;
+  if (estimated) frac = 0.6;
+  let dep = (1 - frac) * taw;
+
+  const days = w.daily.map(d => {
+    const etc = d.et0 * kc;
+    const effRain = d.rain >= 3 ? d.rain * 0.8 : 0;
+    dep = Math.max(0, dep + etc - effRain);
+
+    let action = 'skip', net = 0;
+    if (dep >= raw) {
+      if (d.rain >= 5 || d.rainProb >= 70) {
+        action = 'wait';
+      } else {
+        action = 'irrigate';
+        net = Math.min(dep, taw);
+        dep = Math.max(0, dep - net);
+      }
+    }
+    const gross = net / eff;
+    return {
+      date: d.date, tmax: d.tmax, tmin: d.tmin,
+      rain: +d.rain.toFixed(1), rainProb: d.rainProb,
+      et0: +d.et0.toFixed(1), etc: +etc.toFixed(1),
+      action,
+      netMm: +net.toFixed(1),
+      grossMm: +gross.toFixed(1),
+      litres: Math.round(gross * LITRES_PER_MM_ACRE * o.area)
+    };
+  });
+
+  const next = days.find(d => d.action === 'irrigate');
+  return {
+    kc: +kc.toFixed(2),
+    rootDepthM: +root.toFixed(2),
+    tawMm: Math.round(taw),
+    rawMm: Math.round(raw),
+    availablePct: Math.round(frac * 100),
+    soilEstimated: estimated,
+    days,
+    summary: {
+      today: days[0].action,
+      nextDate: next ? next.date : null,
+      weekLitres: days.reduce((s, d) => s + d.litres, 0),
+      weekMm: +days.reduce((s, d) => s + d.grossMm, 0).toFixed(1),
+      totalRain: +days.reduce((s, d) => s + d.rain, 0).toFixed(1)
+    }
+  };
+}
+
+app.post('/api/irrigation', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const crop = b.crop;
+    if (!IRR_CROPS[crop]) return res.status(400).json({ error: { message: 'Please choose a supported crop.' } });
+
+    const o = {
+      crop,
+      stage: IRR_ROOT_FACTOR[b.stage] ? b.stage : 'mid',
+      soil: IRR_SOILS[b.soil] ? b.soil : 'loamy',
+      method: IRR_EFFICIENCY[b.method] ? b.method : 'drip',
+      area: Math.min(1000, Math.max(0.01, Number(b.area) || 1)),
+      lang: b.lang === 'ta' ? 'ta' : 'en'
+    };
+
+    let lat = Number(b.lat), lon = Number(b.lon), place = null;
+    if (!(isFinite(lat) && isFinite(lon) && b.lat != null && b.lon != null)) {
+      if (!b.district && !b.state) return res.status(400).json({ error: { message: 'Please select a location or use your current location.' } });
+      const g = await geocodePlace(b.district, b.state);
+      lat = g.lat; lon = g.lon; place = g.name;
+    } else {
+      place = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    }
+
+    const key = [lat.toFixed(2), lon.toFixed(2), o.crop, o.stage, o.soil, o.method, o.area, o.lang].join('|');
+    const cached = irrigationCache.get(key);
+    if (cached && Date.now() - cached.at < IRRIGATION_TTL) return res.json(cached.data);
+
+    const w = await fetchWeather(lat, lon);
+    const plan = planIrrigation(w, o);
+
+    // Short farmer-friendly tips from Gemini (optional — plan still works without it)
+    let advice = null;
+    if (GEMINI_API_KEY) {
+      try {
+        const langLine = o.lang === 'ta'
+          ? 'Write in TAMIL (தமிழ் script) only.'
+          : 'Write in simple English.';
+        const facts = {
+          crop: o.crop, stage: o.stage, soil: o.soil, method: o.method, areaAcres: o.area,
+          today: plan.summary.today, nextIrrigation: plan.summary.nextDate,
+          weekWaterMm: plan.summary.weekMm, rainNext7DaysMm: plan.summary.totalRain,
+          soilAvailableWaterPct: plan.availablePct,
+          tempNowC: w.current && w.current.temp
+        };
+        const text = await callGemini([{ text:
+`You are an agronomist advising an Indian farmer. Based ONLY on this computed irrigation plan, give 3 to 4 short practical tips (best time of day to irrigate, how to save water for this method, what to watch in this crop stage, and one rain-related tip if relevant). Do not change the schedule or invent numbers.
+${langLine}
+FORMAT: plain text, no markdown, each tip on its own line starting with "- ".
+
+Plan: ${JSON.stringify(facts)}` }], 500);
+        advice = text.trim();
+      } catch (e) {
+        console.error('Irrigation advice failed:', e.message);
+      }
+    }
+
+    const data = { location: place, current: w.current, ...plan, advice, source: 'open-meteo' };
+    irrigationCache.set(key, { at: Date.now(), data });
+    console.log(`irrigation ${o.crop}/${o.stage}/${o.soil} @ ${place}: today=${plan.summary.today}`);
+    res.json(data);
+
+  } catch (err) {
+    console.error('Irrigation handler failed:', err.message);
+    res.status(400).json({ error: { message: err.message || 'Could not build the irrigation plan.' } });
+  }
+});
+
+/* ===================== IRRIGATION ALERTS (Web Push + Hasura DB + scheduled check) ===================== */
+// Needs env: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, HASURA_GRAPHQL_URL, HASURA_ADMIN_SECRET, CRON_SECRET
+// Needs npm package "web-push" (loaded lazily so the rest of the server still runs without it).
+const CRON_SECRET = process.env.CRON_SECRET;
+const IRR_CROP_TA = {
+  'Rice':'நெல்','Wheat':'கோதுமை','Maize':'மக்காச்சோளம்','Ragi':'கேழ்வரகு','Sugarcane':'கரும்பு','Cotton':'பருத்தி','Groundnut':'நிலக்கடலை',
+  'Tomato':'தக்காளி','Onion':'வெங்காயம்','Potato':'உருளைக்கிழங்கு','Brinjal':'கத்தரிக்காய்','Okra':'வெண்டைக்காய்','Chilli':'மிளகாய்',
+  'Banana':'வாழை','Coconut':'தென்னை','Turmeric':'மஞ்சள்','Green Gram':'பச்சைப்பயறு','Black Gram':'உளுந்து','Sunflower':'சூரியகாந்தி',
+  'Cabbage':'முட்டைக்கோஸ்','Carrot':'கேரட்','Mango':'மா'
+};
+
+let _webpush;
+function getWebPush() {
+  if (_webpush !== undefined) return _webpush;
+  try {
+    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) throw new Error('VAPID keys are not set');
+    const wp = require('web-push');
+    wp.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@agrinova.app', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+    _webpush = wp;
+  } catch (e) {
+    console.error('Web push disabled:', e.message);
+    _webpush = null;
+  }
+  return _webpush;
+}
+
+async function hasuraGql(query, variables) {
+  const url = process.env.HASURA_GRAPHQL_URL, secret = process.env.HASURA_ADMIN_SECRET;
+  if (!url || !secret) throw new Error('Alert storage is not configured (HASURA_GRAPHQL_URL / HASURA_ADMIN_SECRET).');
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hasura-admin-secret': secret },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(15000)
+  });
+  const j = await r.json();
+  if (j.errors) throw new Error(j.errors[0].message);
+  return j.data;
+}
+
+function istNow() {
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()); // YYYY-MM-DD
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date())) % 24;
+  return { date, hour };
+}
+
+function normalizeAlertConfig(b) {
+  if (!b || !IRR_CROPS[b.crop]) throw new Error('Please choose a supported crop.');
+  const num = v => (v != null && v !== '' && isFinite(Number(v))) ? Number(v) : null;
+  return {
+    crop: b.crop,
+    stage: IRR_ROOT_FACTOR[b.stage] ? b.stage : 'mid',
+    soil: IRR_SOILS[b.soil] ? b.soil : 'loamy',
+    method: IRR_EFFICIENCY[b.method] ? b.method : 'drip',
+    area: Math.min(1000, Math.max(0.01, Number(b.area) || 1)),
+    lang: b.lang === 'ta' ? 'ta' : 'en',
+    lat: num(b.lat), lon: num(b.lon),
+    state: String(b.state || '').slice(0, 60),
+    district: String(b.district || '').slice(0, 60)
+  };
+}
+
+async function planForConfig(c, memo) {
+  let lat = c.lat, lon = c.lon;
+  if (lat == null || lon == null) {
+    const g = await geocodePlace(c.district, c.state);
+    lat = g.lat; lon = g.lon;
+  }
+  const wkey = lat.toFixed(2) + '|' + lon.toFixed(2);
+  if (!memo.has(wkey)) memo.set(wkey, fetchWeather(lat, lon));
+  return planIrrigation(await memo.get(wkey), c);
+}
+
+// Days between irrigations for this crop/soil (readily-available water ÷ average daily crop use)
+function cycleDays(plan) {
+  const avg = plan.days.reduce((s, d) => s + d.etc, 0) / plan.days.length;
+  return Math.max(1, Math.floor(plan.rawMm / Math.max(avg, 0.1)));
+}
+function dueByCycle(row, plan, iso) {
+  if (!row.irrigated_on) return true;
+  const next = new Date(row.irrigated_on + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + cycleDays(plan));
+  return iso >= next.toISOString().slice(0, 10);
+}
+
+// Which notification (if any) should go out right now? One per type per day.
+function decideAlert(plan, hour, row) {
+  const t = plan.days[0], n = plan.days[1];
+  let type = null;
+  if (hour >= 5 && t.action === 'irrigate' && dueByCycle(row, plan, t.date)) type = 'today';
+  else if (hour >= 5 && t.action === 'wait' && dueByCycle(row, plan, t.date)) type = 'wait';
+  else if (hour >= 16 && n && n.action === 'irrigate' && dueByCycle(row, plan, n.date)) type = 'tomorrow';
+  if (!type) return null;
+  const key = `${t.date}:${type}`;
+  return row.last_key === key ? null : { type, key };
+}
+
+function buildAlertMessage(type, plan, c) {
+  const ta = c.lang === 'ta';
+  const crop = ta ? (IRR_CROP_TA[c.crop] || c.crop) : c.crop;
+  const t = plan.days[0], n = plan.days[1];
+  if (type === 'today') return {
+    title: ta ? `💧 இன்று நீர் பாய்ச்சவும் — ${crop}` : `💧 Irrigate today — ${crop}`,
+    body: ta ? `சுமார் ${t.grossMm} மி.மீ (${c.area} ஏக்கருக்கு ${t.litres.toLocaleString('en-IN')} லிட்டர்). பாய்ச்சிய பின் "பாய்ச்சினேன்" அழுத்தவும்.`
+             : `Apply about ${t.grossMm} mm (${t.litres.toLocaleString('en-IN')} litres for ${c.area} acres). Tap "Irrigated" when done.`,
+    canDone: true, doneLabel: ta ? '✅ பாய்ச்சினேன்' : '✅ Irrigated'
+  };
+  if (type === 'wait') return {
+    title: ta ? `🌧️ நீர் பாய்ச்ச வேண்டாம் — ${crop}` : `🌧️ Hold irrigation — ${crop}`,
+    body: ta ? `மண் காய்ந்து வருகிறது, ஆனால் மழை வர வாய்ப்பு உள்ளது (${t.rain} மி.மீ, ${t.rainProb}%). நாளை பார்க்கவும்.`
+             : `Soil is drying but rain is likely (${t.rain} mm, ${t.rainProb}% chance). Check again tomorrow.`
+  };
+  return {
+    title: ta ? `⏰ நாளை நீர்ப்பாசனம் தேவை — ${crop}` : `⏰ Irrigation due tomorrow — ${crop}`,
+    body: ta ? `நாளை சுமார் ${n.grossMm} மி.மீ (${n.litres.toLocaleString('en-IN')} லிட்டர்) தேவைப்படும். தயாராக இருங்கள்.`
+             : `About ${n.grossMm} mm (${n.litres.toLocaleString('en-IN')} litres) will be needed tomorrow. Get ready.`
+  };
+}
+
+async function pushTo(row, payload) {
+  const wp = getWebPush();
+  if (!wp) throw new Error('Web push is not configured on the server.');
+  try {
+    await wp.sendNotification(row.subscription, JSON.stringify(Object.assign({ url: 'irrigation.html', tag: 'irrigation' }, payload)), { TTL: 6 * 3600 });
+    return true;
+  } catch (e) {
+    if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
+      await hasuraGql(`mutation($e:String!){delete_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      return false;
+    }
+    throw e;
+  }
+}
+
+let alertRunBusy = false;
+async function runIrrigationChecks() {
+  if (alertRunBusy) return { skipped: true };
+  alertRunBusy = true;
+  const stats = { subscribers: 0, sent: 0, removed: 0, errors: 0 };
+  try {
+    const data = await hasuraGql(`query { irrigation_alerts { id endpoint subscription config last_key irrigated_on } }`);
+    const rows = data.irrigation_alerts || [];
+    stats.subscribers = rows.length;
+    const { hour } = istNow();
+    const memo = new Map();
+    for (const row of rows) {
+      try {
+        const c = normalizeAlertConfig(row.config);
+        const plan = await planForConfig(c, memo);
+        const d = decideAlert(plan, hour, row);
+        if (!d) continue;
+        const ok = await pushTo(row, Object.assign({ tag: 'irrigation-' + d.type }, buildAlertMessage(d.type, plan, c)));
+        if (!ok) { stats.removed++; continue; }
+        await hasuraGql(`mutation($id:uuid!,$k:String!){update_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
+        stats.sent++;
+      } catch (e) {
+        stats.errors++;
+        console.error('Alert check failed for one subscriber:', e.message);
+      }
+    }
+  } finally {
+    alertRunBusy = false;
+  }
+  console.log('irrigation alert run:', JSON.stringify(stats));
+  return stats;
+}
+
+app.get('/api/push/public-key', (req, res) => {
+  if (!process.env.VAPID_PUBLIC_KEY) return res.status(503).json({ error: { message: 'Alerts are not set up on the server yet.' } });
+  res.json({ key: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/irrigation/subscribe', async (req, res) => {
+  try {
+    const { subscription, config } = req.body || {};
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: { message: 'Invalid notification subscription.' } });
+    }
+    if (!getWebPush()) return res.status(503).json({ error: { message: 'Alerts are not set up on the server yet.' } });
+    const c = normalizeAlertConfig(config);
+
+    await hasuraGql(
+      `mutation($o: irrigation_alerts_insert_input!){
+         insert_irrigation_alerts_one(object:$o, on_conflict:{constraint: irrigation_alerts_endpoint_key, update_columns:[subscription, config]}){ id }
+       }`,
+      { o: { endpoint: subscription.endpoint, subscription, config: c } }
+    );
+
+    const ta = c.lang === 'ta';
+    pushTo({ subscription, endpoint: subscription.endpoint }, {
+      tag: 'irrigation-welcome',
+      title: ta ? '🔔 நீர்ப்பாசன அறிவிப்புகள் இயக்கப்பட்டன' : '🔔 Irrigation alerts are on',
+      body: ta ? `${IRR_CROP_TA[c.crop] || c.crop} பயிருக்கு நீர் பாய்ச்ச வேண்டிய நேரத்தில் தெரிவிப்போம்.`
+               : `We'll notify you when your ${c.crop} needs water.`
+    }).catch(e => console.error('Welcome push failed:', e.message));
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Subscribe failed:', e.message);
+    res.status(400).json({ error: { message: e.message || 'Could not turn on alerts.' } });
+  }
+});
+
+app.post('/api/irrigation/unsubscribe', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!){delete_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
+  }
+});
+
+// Farmer tapped "Irrigated": pause reminders for one irrigation cycle
+app.post('/api/irrigation/done', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!,$d:String!){update_irrigation_alerts(where:{endpoint:{_eq:$e}},_set:{irrigated_on:$d}){affected_rows}}`,
+      { e: endpoint, d: istNow().date });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not save.' } });
+  }
+});
+
+// Called by an external scheduler (cron-job.org) every ~30 min — this also keeps Render awake.
+app.all('/api/irrigation/check', async (req, res) => {
+  if (!CRON_SECRET || req.query.secret !== CRON_SECRET) return res.status(401).json({ error: { message: 'Unauthorized.' } });
+  try {
+    res.json(await runIrrigationChecks());
+  } catch (e) {
+    console.error('Alert run failed:', e.message);
+    res.status(400).json({ error: { message: e.message } });
+  }
+});
+
+// Backup scheduler while the server is awake
+if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
+  setInterval(() => { runIrrigationChecks().catch(e => console.error('Scheduled alert run failed:', e.message)); }, 30 * 60 * 1000);
+}
 
 /* Debug helper: open /api/price-debug?state=Tamil%20Nadu&crop=Tomato in the browser
    to see exactly what Agmarknet returns and why live data is or isn't used. */
