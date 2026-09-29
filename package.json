@@ -1,18 +1,17 @@
 {
-  "name": "disease-detector-backend",
+  "name": "agrinova-backend",
   "version": "1.0.0",
-  "description": "Minimal backend that keeps the Anthropic API key server-side for the chatbot and disease detector",
-  "main": "server.js",
+  "description": "AgriNova backend — disease diagnosis, chatbot, schemes, fertilizer, market price and email notifications, all powered by Gemini.",
+  "main": "hasura-handler.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node hasura-handler.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "@anthropic-ai/sdk": "^0.32.1"
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.14"
   }
 }
