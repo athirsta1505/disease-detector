@@ -7,6 +7,7 @@
 //   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
+//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: rain alerts (push + email) + hourly water reminder
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
@@ -1194,6 +1195,172 @@ app.all('/api/irrigation/check', async (req, res) => {
 // Backup scheduler while the server is awake
 if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
   setInterval(() => { runIrrigationChecks().catch(e => console.error('Scheduled alert run failed:', e.message)); }, 30 * 60 * 1000);
+}
+
+/* ===================== WEATHER ALERTS (rain push + email, hourly water reminder) ===================== */
+// Used by weather.html "Notifications" card.
+// Needs: Hasura table "weather_alerts" (see weather_alerts.sql), npm package "nodemailer",
+// and env SMTP_USER + SMTP_PASS (Gmail address + Gmail App Password) for the rain emails.
+let _mailer;
+function getMailer() {
+  if (_mailer !== undefined) return _mailer;
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) throw new Error('SMTP_USER / SMTP_PASS are not set');
+    const nodemailer = require('nodemailer');
+    _mailer = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
+  } catch (e) {
+    console.error('Email disabled:', e.message);
+    _mailer = null;
+  }
+  return _mailer;
+}
+
+async function pushWeather(row, payload) {
+  const wp = getWebPush();
+  if (!wp) return true;
+  try {
+    await wp.sendNotification(row.subscription,
+      JSON.stringify(Object.assign({ url: 'weather.html' }, payload)), { TTL: 3600 });
+    return true;
+  } catch (e) {
+    if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
+      await hasuraGql(`mutation($e:String!){delete_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      return false;
+    }
+    throw e;
+  }
+}
+
+app.post('/api/weather-alerts/subscribe', async (req, res) => {
+  try {
+    const { subscription, email, lat, lon, place, rain, water } = req.body || {};
+    if (!subscription || !subscription.endpoint) return res.status(400).json({ error: { message: 'Invalid subscription.' } });
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: { message: 'Enter a valid email.' } });
+    if (!isFinite(Number(lat)) || !isFinite(Number(lon))) return res.status(400).json({ error: { message: 'Missing location.' } });
+    await hasuraGql(
+      `mutation($o: weather_alerts_insert_input!){
+        insert_weather_alerts_one(object:$o, on_conflict:{constraint: weather_alerts_endpoint_key,
+          update_columns:[subscription,email,lat,lon,place,rain_on,water_on]}){ id } }`,
+      { o: { endpoint: subscription.endpoint, subscription, email: email || null,
+             lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
+             rain_on: rain !== false, water_on: water !== false } });
+    pushWeather({ subscription, endpoint: subscription.endpoint },
+      { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Rain alerts and hourly water reminders are now active.' })
+      .catch(e => console.error('Welcome push failed:', e.message));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Weather subscribe failed:', e.message);
+    res.status(400).json({ error: { message: e.message || 'Could not turn on alerts.' } });
+  }
+});
+
+app.post('/api/weather-alerts/unsubscribe', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!){delete_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
+  }
+});
+
+async function fetchRainForecast(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('hourly', 'precipitation_probability,precipitation');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '2');
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.hourly) throw new Error('Weather service error.');
+  return j.hourly;
+}
+
+let wxBusy = false;
+async function runWeatherAlerts() {
+  if (wxBusy) return { skipped: true };
+  wxBusy = true;
+  const stats = { subscribers: 0, rain: 0, water: 0, emails: 0, errors: 0 };
+  try {
+    const data = await hasuraGql(`query { weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key } }`);
+    const rows = data.weather_alerts || [];
+    stats.subscribers = rows.length;
+    const { date, hour } = istNow();
+    const nowKey = `${date}T${String(hour).padStart(2, '0')}:00`;
+    const memo = new Map();
+
+    for (const row of rows) {
+      try {
+        const set = {};
+
+        // Rain alert: push + email, once per 3-hour block
+        if (row.rain_on) {
+          const k = row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
+          if (!memo.has(k)) memo.set(k, fetchRainForecast(row.lat, row.lon));
+          const h = await memo.get(k);
+          const i = h.time.indexOf(nowKey);
+          if (i >= 0) {
+            let maxP = 0, mm = 0, startAt = null;
+            for (let x = i; x < Math.min(i + 3, h.time.length); x++) {
+              const p = h.precipitation_probability[x] || 0;
+              if (p >= 60 || (h.precipitation[x] || 0) >= 0.5) { if (!startAt) startAt = h.time[x].slice(11, 16); }
+              maxP = Math.max(maxP, p); mm += h.precipitation[x] || 0;
+            }
+            const rainKey = `${date}:${Math.floor(hour / 3)}`;
+            if (startAt && row.last_rain_key !== rainKey) {
+              const place = row.place || 'your area';
+              const title = `🌧️ Rain expected near ${place}`;
+              const body = `${maxP}% chance of rain, about ${mm.toFixed(1)} mm in the next 3 hours (from ${startAt}). Hold spraying and fertiliser, and clear field drains.`;
+              const ok = await pushWeather(row, { tag: 'wx-rain', title, body });
+              if (ok) {
+                set.last_rain_key = rainKey; stats.rain++;
+                const mailer = getMailer();
+                if (mailer && row.email) {
+                  mailer.sendMail({
+                    from: `"Agrinova Weather" <${process.env.SMTP_USER}>`,
+                    to: row.email, subject: title,
+                    text: `${body}\n\nOpen Agrinova Weather for the full forecast.`
+                  }).catch(e => console.error('Email failed:', e.message));
+                  stats.emails++;
+                }
+              }
+            }
+          }
+        }
+
+        // Hourly water reminder: push only, 6 AM to 8 PM IST
+        const waterKey = `${date}:${hour}`;
+        if (row.water_on && hour >= 6 && hour <= 20 && row.last_water_key !== waterKey) {
+          const ok = await pushWeather(row, {
+            tag: 'wx-water', title: '💧 Water reminder',
+            body: 'Time to check your crop water. Check soil moisture and irrigate if the soil is dry.'
+          });
+          if (ok) { set.last_water_key = waterKey; stats.water++; }
+        }
+
+        if (Object.keys(set).length) {
+          await hasuraGql(`mutation($id:uuid!,$s:weather_alerts_set_input!){update_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
+        }
+      } catch (e) {
+        stats.errors++;
+        console.error('Weather alert failed for one subscriber:', e.message);
+      }
+    }
+  } finally { wxBusy = false; }
+  console.log('weather alert run:', JSON.stringify(stats));
+  return stats;
+}
+
+// cron-job.org: call every 15 min -> /api/weather-alerts/check?secret=YOUR_CRON_SECRET
+app.all('/api/weather-alerts/check', async (req, res) => {
+  if (!CRON_SECRET || req.query.secret !== CRON_SECRET) return res.status(401).json({ error: { message: 'Unauthorized.' } });
+  try { res.json(await runWeatherAlerts()); }
+  catch (e) { res.status(400).json({ error: { message: e.message } }); }
+});
+if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
+  setInterval(() => { runWeatherAlerts().catch(e => console.error('Weather run failed:', e.message)); }, 15 * 60 * 1000);
 }
 
 /* Debug helper: open /api/price-debug?state=Tamil%20Nadu&crop=Tomato in the browser
