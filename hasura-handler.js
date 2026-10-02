@@ -128,7 +128,7 @@ app.post('/hasura/diagnose', async (req, res) => {
       text = await callGemini([
         { text: prompt },
         { inline_data: { mime_type: mediaType, data: image } }
-      ], 900);
+      ], 2500);
     } catch (e) {
       console.error('Gemini API error (diagnose):', e);
       return res.status(400).json({ message: e.message || 'The AI service returned an error.' });
@@ -204,7 +204,7 @@ AgriNova Assistant:`;
 
     let text;
     try {
-      text = await callGemini([{ text: systemPrompt }], 350);
+      text = await callGemini([{ text: systemPrompt }], 1500);
     } catch (e) {
       console.error('Gemini API error (chat):', e);
       return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
@@ -256,7 +256,7 @@ AgriNova Assistant:`;
       text = await callGemini([
         { text: systemPrompt },
         { inline_data: { mime_type: mediaType, data: image } }
-      ], 400);
+      ], 1500);
     } catch (e) {
       console.error('Gemini API error (chat-image):', e);
       return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
@@ -341,7 +341,7 @@ async function fetchSchemesPlain() {
   let lastErr;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const text = await callGemini([{ text: SCHEMES_PROMPT }], 4000);
+      const text = await callGemini([{ text: SCHEMES_PROMPT }], 8000);
       const parsed = parseSchemesJson(text);
       parsed.grounded = false;
       return parsed;
@@ -430,7 +430,7 @@ Respond ONLY with raw JSON (no markdown fences, no preamble) in exactly this sha
 
     let text;
     try {
-      text = await callGemini([{ text: prompt }], 500);
+      text = await callGemini([{ text: prompt }], 2000);
     } catch (e) {
       console.error('Gemini API error (fertilizer):', e);
       return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
@@ -607,7 +607,7 @@ ${langLine}
 Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
 { "found": true, "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "priceDate": "date of the price", "where": "market/district/state the price is for", "note": "one short sentence naming the source and date" }`;
 
-  const text = await callGeminiGrounded([{ text: prompt }], 1000);
+  const text = await callGeminiGrounded([{ text: prompt }], 2500);
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
   if (a === -1 || b === -1) throw new Error('Could not parse the searched price.');
   const p = JSON.parse(text.slice(a, b + 1));
@@ -644,7 +644,7 @@ ${langLine}
 Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
 { "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "note": "short note saying this is an estimate, confirm with the local market" }`;
 
-  const text = await callGemini([{ text: prompt }], 1000);
+  const text = await callGemini([{ text: prompt }], 2000);
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
   if (s === -1 || e === -1) throw new Error('Could not parse the price estimate.');
   const p = JSON.parse(text.slice(s, e + 1));
@@ -957,7 +957,7 @@ app.post('/api/irrigation', async (req, res) => {
 ${langLine}
 FORMAT: plain text, no markdown, each tip on its own line starting with "- ".
 
-Plan: ${JSON.stringify(facts)}` }], 500);
+Plan: ${JSON.stringify(facts)}` }], 1500);
         advice = text.trim();
       } catch (e) {
         console.error('Irrigation advice failed:', e.message);
