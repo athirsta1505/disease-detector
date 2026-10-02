@@ -8,6 +8,7 @@
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
 //   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: rain alerts (push + email) + hourly water reminder
+//  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
@@ -29,6 +30,26 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
+
+app.set('trust proxy', 1); // Render sits behind a proxy, needed for real client IPs
+
+// Simple in-memory rate limit so nobody can burn your Gemini quota.
+const _hits = new Map();
+function rateLimit(max, windowMs) {
+  return (req, res, next) => {
+    const k = req.ip + '|' + req.baseUrl + req.path;
+    const now = Date.now();
+    const h = (_hits.get(k) || []).filter(t => now - t < windowMs);
+    if (h.length >= max) {
+      return res.status(429).json({ error: { message: 'Too many requests. Please wait a minute and try again.' } });
+    }
+    h.push(now);
+    _hits.set(k, h);
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of _hits) if (!v.some(t => now - t < 120000)) _hits.delete(k); }, 5 * 60 * 1000);
+app.use(['/api/chat', '/api/chat-image', '/api/fertilizer', '/api/market-price', '/api/irrigation'], rateLimit(30, 60 * 1000));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-3.6-flash';
@@ -1389,6 +1410,145 @@ app.get('/api/price-debug', async (req, res) => {
       out.tries.push({ commodity: name, error: e.message });
     }
   }
+  res.json(out);
+});
+
+/* ===================== CHAT HISTORY (Hasura tables: chats + chat_messages) ===================== */
+// chatbot.html calls these routes (instead of talking to Hasura directly), so Hasura is only
+// reached with the admin secret from here — no public database permissions needed, and each
+// farmer only sees their own chats. "owner" = the farmer's email, or a random per-browser id.
+// All routes are GET/POST only, so the existing CORS settings keep working.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function chatGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  if (req.params.id && !UUID_RE.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+  req.owner = raw;
+  next();
+}
+
+async function ownsChat(id, owner) {
+  const d = await hasuraGql(
+    `query($id:uuid!,$o:String!){ chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
+    { id, o: owner });
+  return d.chats[0] || null;
+}
+
+const chatErr = (res, e) => res.status(400).json({ error: { message: e.message || 'Chat history error.' } });
+const notFound = res => res.status(404).json({ error: { message: 'Chat not found.' } });
+
+// List this owner's chats, newest activity first
+app.get('/api/chats', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ chats(where:{owner:{_eq:$o}}, order_by:{updated_at:desc}, limit:50){ id title created_at } }`,
+      { o: req.owner });
+    res.json({ chats: d.chats });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Create a chat: body { owner, name?, email? }
+app.post('/api/chats', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `mutation($o:chats_insert_input!){ insert_chats_one(object:$o){ id title created_at } }`,
+      { o: {
+          owner: req.owner,
+          title: 'New chat',
+          farmer_name: String(req.body.name || '').slice(0, 80) || null,
+          farmer_email: String(req.body.email || '').slice(0, 120) || null
+      } });
+    res.json({ chat: d.insert_chats_one });
+  } catch (e) { chatErr(res, e); }
+});
+
+// All messages of one chat
+app.get('/api/chats/:id/messages', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
+    const d = await hasuraGql(
+      `query($id:uuid!){ chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
+      { id: req.params.id });
+    res.json({ messages: d.chat_messages });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Save messages: body { owner, messages:[{ sender:'user'|'ai', message }] }. Auto-titles a "New chat".
+app.post('/api/chats/:id/messages', chatGuard, async (req, res) => {
+  try {
+    const chat = await ownsChat(req.params.id, req.owner);
+    if (!chat) return notFound(res);
+    const objects = (Array.isArray(req.body.messages) ? req.body.messages : [])
+      .filter(m => m && (m.sender === 'user' || m.sender === 'ai') && String(m.message || '').trim())
+      .slice(0, 20)
+      .map(m => ({ chat_id: req.params.id, sender: m.sender, message: String(m.message).slice(0, 8000) }));
+    if (!objects.length) return res.json({ ok: true });
+    const set = { updated_at: 'now()' };
+    if (chat.title === 'New chat') {
+      const first = objects.find(o => o.sender === 'user');
+      if (first) set.title = first.message.replace(/\s+/g, ' ').trim().slice(0, 32);
+    }
+    await hasuraGql(
+      `mutation($o:[chat_messages_insert_input!]!,$id:uuid!,$s:chats_set_input!){
+         insert_chat_messages(objects:$o){ affected_rows }
+         update_chats_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
+      { o: objects, id: req.params.id, s: set });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/chats/:id/rename', chatGuard, async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim().slice(0, 60);
+    if (!title) return res.status(400).json({ error: { message: 'Title is empty.' } });
+    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
+    await hasuraGql(`mutation($id:uuid!,$t:String!){ update_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
+      { id: req.params.id, t: title });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// "Clear" button: remove the messages of this chat and reset its title
+app.post('/api/chats/:id/clear', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
+    await hasuraGql(
+      `mutation($id:uuid!){
+         delete_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         update_chats_by_pk(pk_columns:{id:$id}, _set:{title:"New chat"}){ id } }`,
+      { id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Delete a chat and its messages
+app.post('/api/chats/:id/delete', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.params.id, req.owner))) return res.json({ ok: true });
+    await hasuraGql(
+      `mutation($id:uuid!){
+         delete_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         delete_chats_by_pk(id:$id){ id } }`,
+      { id: req.params.id });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Health check — open /api/health to see what is configured (never shows secrets)
+app.get('/api/health', async (req, res) => {
+  const out = {
+    ok: true,
+    gemini: !!GEMINI_API_KEY,
+    dataGov: !!DATA_GOV_API_KEY,
+    push: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+    email: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+    hasura: false
+  };
+  try {
+    await hasuraGql(`query { chats_aggregate { aggregate { count } } chat_messages_aggregate { aggregate { count } } }`);
+    out.hasura = true;
+  } catch (e) { out.hasuraError = e.message; }
   res.json(out);
 });
 
