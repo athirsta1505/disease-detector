@@ -1594,48 +1594,61 @@ app.get('/api/price-debug', async (req, res) => {
   res.json(out);
 });
 
-/* ===================== PASSWORD RESET LINK EMAIL (used by forgot.html) ===================== */
-// forgot.html builds the reset link + token and calls this route; we only deliver the email (via Brevo).
-// Optional env on Render: RESET_ALLOWED_ORIGINS = comma separated site addresses allowed inside the link,
-// e.g. https://yoursite.com,http://127.0.0.1:5500   (if not set, any http/https site is accepted)
-const resetSends = new Map(); // email -> [timestamps]
-setInterval(() => { const now = Date.now(); for (const [k, v] of resetSends) if (!v.some(t => now - t < 3600000)) resetSends.delete(k); }, 10 * 60 * 1000);
-app.use('/api/auth/send-reset-link', rateLimit(5, 60 * 1000));
+/* ===================== PASSWORD RESET CODE (OTP) EMAIL (used by forgot.html) ===================== */
+// forgot.html asks for a 6-digit code here, the farmer types it in, and only after the code is
+// verified does the page let them set a new password. Uses the same Brevo setup as the weather emails.
+const resetCodes = new Map(); // email -> { hash, exp, tries, sends:[timestamps] }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of resetCodes) if ((!v.exp || v.exp < now) && !v.sends.some(t => now - t < 3600000)) resetCodes.delete(k);
+}, 10 * 60 * 1000);
+app.use('/api/auth', rateLimit(10, 60 * 1000));
+const resetHash = (email, code) => crypto.createHash('sha256').update('reset|' + email + '|' + code + '|' + MAIL_SECRET).digest('hex');
 
-app.post('/api/auth/send-reset-link', async (req, res) => {
+app.post('/api/auth/send-reset-code', async (req, res) => {
   try {
     const email = String((req.body && req.body.email) || '').trim().toLowerCase();
     const name = String((req.body && req.body.name) || '').trim().replace(/[\r\n]/g, ' ').slice(0, 60);
-    const link = String((req.body && req.body.link) || '').trim();
     if (!EMAIL_RE.test(email) || email.length > 120) return res.status(400).json({ error: { message: 'Enter a valid email address.' } });
-
-    let u;
-    try { u = new URL(link); } catch (e) { return res.status(400).json({ error: { message: 'Invalid reset link.' } }); }
-    const token = u.searchParams.get('token') || '';
-    if (!/^https?:$/.test(u.protocol) || !u.pathname.endsWith('/reset-password.html') || !/^[A-Za-z0-9]{16,64}$/.test(token)) {
-      return res.status(400).json({ error: { message: 'Invalid reset link.' } });
-    }
-    const allowed = String(process.env.RESET_ALLOWED_ORIGINS || '').split(',').map(x => x.trim().replace(/\/$/, '')).filter(Boolean);
-    if (allowed.length && !allowed.includes(u.origin)) return res.status(400).json({ error: { message: 'Invalid reset link.' } });
     if (!emailConfigured()) return res.status(503).json({ error: { message: 'Email is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).' } });
 
     const now = Date.now();
-    const list = (resetSends.get(email) || []).filter(t => now - t < 3600000);
-    if (list.length >= 3) return res.status(429).json({ error: { message: 'Too many reset emails for this address. Try again in an hour.' } });
+    const rec = resetCodes.get(email) || { sends: [], hash: null, exp: 0, tries: 0 };
+    rec.sends = rec.sends.filter(t => now - t < 3600000);
+    if (rec.sends.length && now - rec.sends[rec.sends.length - 1] < 30000) {
+      return res.status(429).json({ error: { message: 'Please wait 30 seconds before asking for a new code.' } });
+    }
+    if (rec.sends.length >= 5) {
+      return res.status(429).json({ error: { message: 'Too many codes requested for this email. Try again in an hour.' } });
+    }
 
+    const code = String(crypto.randomInt(100000, 1000000));
     await sendMail({
       to: email,
       fromName: 'Smart Agriculture',
-      subject: 'Reset your Smart Agriculture password',
-      text: `Hi ${name || 'there'},\n\nWe received a request to reset your Smart Agriculture password. Open the link below to set a new password:\n\n${u.toString()}\n\nThis link expires in 15 minutes. If you did not ask for this, you can ignore this email and your password will stay the same.`
+      subject: `Your Smart Agriculture password reset code: ${code}`,
+      text: `Hi ${name || 'there'},\n\nYour password reset code is ${code}.\n\nIt works for 10 minutes. If you did not ask to reset your password, you can ignore this email and your password will stay the same.`
     });
-    list.push(now); resetSends.set(email, list);
+    rec.sends.push(now); rec.hash = resetHash(email, code); rec.exp = now + 10 * 60 * 1000; rec.tries = 0;
+    resetCodes.set(email, rec);
     res.json({ ok: true });
   } catch (e) {
-    console.error('Send reset link failed:', e.message);
+    console.error('Send reset code failed:', e.message);
     const known = /^(Email service|EMAIL_FROM|Email sending)/.test(e.message || '');
     res.status(400).json({ error: { message: known ? e.message : 'Could not send the email. Please try again.' } });
   }
+});
+
+app.post('/api/auth/verify-reset-code', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').trim();
+  const rec = resetCodes.get(email);
+  if (!rec || !rec.hash || rec.exp < Date.now()) return res.status(400).json({ error: { message: 'This code has expired. Please ask for a new one.' } });
+  if (rec.tries >= 5) { rec.hash = null; return res.status(400).json({ error: { message: 'Too many wrong attempts. Please ask for a new code.' } }); }
+  rec.tries++;
+  if (resetHash(email, code) !== rec.hash) return res.status(400).json({ error: { message: 'Wrong code. Please check and try again.' } });
+  rec.hash = null; // single use
+  res.json({ ok: true });
 });
 
 /* ===================== CHAT HISTORY (Hasura tables: chats + chat_messages) ===================== */
