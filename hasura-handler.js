@@ -7,7 +7,8 @@
 //   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
-//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: rain alerts (push + email) + hourly water reminder
+//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
+//      rain alerts (push + email), welcome email, hourly water reminder
 //  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
@@ -50,6 +51,7 @@ function rateLimit(max, windowMs) {
 }
 setInterval(() => { const now = Date.now(); for (const [k, v] of _hits) if (!v.some(t => now - t < 120000)) _hits.delete(k); }, 5 * 60 * 1000);
 app.use(['/api/chat', '/api/chat-image', '/api/fertilizer', '/api/market-price', '/api/irrigation'], rateLimit(30, 60 * 1000));
+app.use('/api/weather-alerts/email', rateLimit(10, 60 * 1000));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-3.6-flash';
@@ -1002,8 +1004,12 @@ function getWebPush() {
 }
 
 async function hasuraGql(query, variables) {
-  const url = process.env.HASURA_GRAPHQL_URL, secret = process.env.HASURA_ADMIN_SECRET;
-  if (!url || !secret) throw new Error('Alert storage is not configured (HASURA_GRAPHQL_URL / HASURA_ADMIN_SECRET).');
+  const clean = v => String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+  const url = clean(process.env.HASURA_GRAPHQL_URL), secret = clean(process.env.HASURA_ADMIN_SECRET);
+  if (!url || !secret) {
+    const missing = [!url && 'HASURA_GRAPHQL_URL', !secret && 'HASURA_ADMIN_SECRET'].filter(Boolean).join(' and ');
+    throw new Error('Alert storage is not configured. Missing on the server: ' + missing + '.');
+  }
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-hasura-admin-secret': secret },
@@ -1218,10 +1224,10 @@ if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process
   setInterval(() => { runIrrigationChecks().catch(e => console.error('Scheduled alert run failed:', e.message)); }, 30 * 60 * 1000);
 }
 
-/* ===================== WEATHER ALERTS (rain push + email, hourly water reminder) ===================== */
+/* ===================== WEATHER ALERTS (daily weather message, rain push + email, hourly water reminder) ===================== */
 // Used by weather.html "Notifications" card.
-// Needs: Hasura table "weather_alerts" (see weather_alerts.sql), npm package "nodemailer",
-// and env SMTP_USER + SMTP_PASS (Gmail address + Gmail App Password) for the rain emails.
+// Needs: Hasura table "weather_alerts" (columns incl. last_daily_key text), and for emails
+// BREVO_API_KEY + EMAIL_FROM (Render free blocks SMTP) or SMTP_USER + SMTP_PASS (Gmail, paid plans / local PC).
 let _mailer;
 function getMailer() {
   if (_mailer !== undefined) return _mailer;
@@ -1252,22 +1258,186 @@ async function pushWeather(row, payload) {
   }
 }
 
+/* ---- Sending email. Render FREE blocks SMTP ports (25/465/587), so Gmail/nodemailer cannot work there.
+   Use an HTTPS mail API instead: set BREVO_API_KEY + EMAIL_FROM (a sender address verified in Brevo) on Render.
+   If BREVO_API_KEY is not set, it falls back to Gmail SMTP (works only on paid Render plans / your own PC). */
+const emailConfigured = () => !!String(process.env.BREVO_API_KEY || '').trim() || !!getMailer();
+async function sendMail({ to, subject, text }) {
+  const brevoKey = String(process.env.BREVO_API_KEY || '').trim();
+  const from = String(process.env.EMAIL_FROM || process.env.SMTP_USER || '').trim();
+  if (brevoKey) {
+    if (!from) throw new Error('EMAIL_FROM is not set on the server.');
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ sender: { name: 'Agrinova Weather', email: from }, to: [{ email: to }], subject, textContent: text }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error('Email service error: ' + (j.message || r.status));
+    }
+    return;
+  }
+  const mailer = getMailer();
+  if (!mailer) throw new Error('Email sending is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).');
+  await mailer.sendMail({ from: `"Agrinova Weather" <${process.env.SMTP_USER}>`, to, subject, text });
+}
+
+/* ---------- Email verification (6-digit code) for weather alerts ---------- */
+// The farmer types an email -> we mail a 6-digit code -> they enter it -> we hand back a signed
+// token (valid 30 days). /api/weather-alerts/subscribe only accepts an email that has such a token,
+// so rain emails can only go to addresses the farmer really owns.
+// Set EMAIL_VERIFY_SECRET on Render (any long random text) so tokens stay valid after a restart.
+const crypto = require('crypto');
+const MAIL_SECRET = process.env.EMAIL_VERIFY_SECRET || process.env.CRON_SECRET || process.env.HASURA_ADMIN_SECRET || crypto.randomBytes(32).toString('hex');
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+const emailCodes = new Map(); // email -> { hash, exp, tries, sends:[timestamps] }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of emailCodes) if ((!v.exp || v.exp < now) && !v.sends.some(t => now - t < 3600000)) emailCodes.delete(k);
+}, 10 * 60 * 1000);
+
+const codeHash = (email, code) => crypto.createHash('sha256').update(email + '|' + code + '|' + MAIL_SECRET).digest('hex');
+function signEmail(email, ttlMs) {
+  const p = Buffer.from(email.toLowerCase() + '|' + (Date.now() + ttlMs)).toString('base64url');
+  return p + '.' + crypto.createHmac('sha256', MAIL_SECRET).update(p).digest('base64url');
+}
+function checkEmailToken(email, token) {
+  try {
+    const [p, sig] = String(token || '').split('.');
+    if (!p || !sig) return false;
+    const good = crypto.createHmac('sha256', MAIL_SECRET).update(p).digest('base64url');
+    const a = Buffer.from(sig), b = Buffer.from(good);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+    const [em, exp] = Buffer.from(p, 'base64url').toString().split('|');
+    return em === String(email).toLowerCase() && Number(exp) > Date.now();
+  } catch (e) { return false; }
+}
+
+app.post('/api/weather-alerts/email/send-code', async (req, res) => {
+  try {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email.length > 120) return res.status(400).json({ error: { message: 'Enter a valid email address.' } });
+    if (!emailConfigured()) return res.status(503).json({ error: { message: 'Email is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).' } });
+
+    const now = Date.now();
+    const rec = emailCodes.get(email) || { sends: [], hash: null, exp: 0, tries: 0 };
+    rec.sends = rec.sends.filter(t => now - t < 3600000);
+    if (rec.sends.length && now - rec.sends[rec.sends.length - 1] < 30000) {
+      return res.status(429).json({ error: { message: 'Please wait 30 seconds before asking for a new code.' } });
+    }
+    if (rec.sends.length >= 5) {
+      return res.status(429).json({ error: { message: 'Too many codes requested for this email. Try again in an hour.' } });
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    await sendMail({
+      to: email,
+      subject: `Your Agrinova verification code: ${code}`,
+      text: `Your Agrinova verification code is ${code}.\n\nIt works for 10 minutes. If you did not ask for this, you can ignore this email.`
+    });
+    rec.sends.push(now); rec.hash = codeHash(email, code); rec.exp = now + 10 * 60 * 1000; rec.tries = 0;
+    emailCodes.set(email, rec);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Send verification code failed:', e.message);
+    const known = /^(Email service|EMAIL_FROM|Email sending)/.test(e.message || '');
+    res.status(400).json({ error: { message: known ? e.message : 'Could not send the email. Please check the address and try again.' } });
+  }
+});
+
+app.post('/api/weather-alerts/email/verify-code', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').trim();
+  const rec = emailCodes.get(email);
+  if (!rec || !rec.hash || rec.exp < Date.now()) return res.status(400).json({ error: { message: 'This code has expired. Please ask for a new one.' } });
+  if (rec.tries >= 5) { rec.hash = null; return res.status(400).json({ error: { message: 'Too many wrong attempts. Please ask for a new code.' } }); }
+  rec.tries++;
+  if (codeHash(email, code) !== rec.hash) return res.status(400).json({ error: { message: 'Wrong code. Please check and try again.' } });
+  rec.hash = null; // single use
+  res.json({ ok: true, token: signEmail(email, 30 * 24 * 3600 * 1000) });
+});
+
+/* ---------- Today's weather message (sunny / cloudy / rain / storm / heat) ---------- */
+async function fetchDayForecast(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '1');
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.daily) throw new Error('Weather service error.');
+  const d = j.daily;
+  return {
+    code: d.weather_code[0],
+    hi: Math.round(d.temperature_2m_max[0]),
+    lo: Math.round(d.temperature_2m_min[0]),
+    mm: +(d.precipitation_sum[0] || 0).toFixed(1),
+    prob: d.precipitation_probability_max ? (d.precipitation_probability_max[0] || 0) : 0,
+    wind: Math.round(d.wind_speed_10m_max[0] || 0)
+  };
+}
+
+function dayMessage(f, place) {
+  const where = place || 'your area';
+  const wet = (f.code >= 51 && f.code <= 67) || (f.code >= 80 && f.code <= 82) || f.prob >= 60 || f.mm >= 2;
+  if (f.code >= 95) return { kind: 'storm', title: `⛈️ Thunderstorm expected near ${where}`,
+    body: `Thunderstorm likely today (about ${f.mm} mm). Stay out of open fields, hold spraying, and keep harvested produce covered.` };
+  if (wet) return { kind: 'rain', title: `🌧️ Rain expected today near ${where}`,
+    body: `${f.prob}% chance of rain, about ${f.mm} mm. High ${f.hi}°, low ${f.lo}°. Hold spraying and fertiliser, clear field drains, and cover harvested produce.` };
+  if (f.hi >= 36) return { kind: 'hot', title: `🔥 Hot day near ${where}`,
+    body: `High of ${f.hi}° today. Irrigate early morning or late evening, mulch young plants, and avoid midday field work.` };
+  if (f.code <= 1) return { kind: 'sunny', title: `☀️ Sunny day near ${where}`,
+    body: `Clear skies, high ${f.hi}°, low ${f.lo}°. Good day for harvesting and drying produce. ${f.wind < 15 ? 'Low wind, so spraying is fine in the morning or evening.' : `It is windy (${f.wind} km/h), so skip spraying.`} Water crops early morning.` };
+  return { kind: 'cloudy', title: `⛅ Cloudy day near ${where}`,
+    body: `Mostly cloudy, high ${f.hi}°, low ${f.lo}°. Comfortable for field work. Rain chance is low (${f.prob}%), but watch for updates.` };
+}
+
 app.post('/api/weather-alerts/subscribe', async (req, res) => {
   try {
-    const { subscription, email, lat, lon, place, rain, water } = req.body || {};
+    const { subscription, email, emailToken, lat, lon, place, rain, water } = req.body || {};
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
     if (!subscription || !subscription.endpoint) return res.status(400).json({ error: { message: 'Invalid subscription.' } });
     if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: { message: 'Enter a valid email.' } });
+    if (cleanEmail && !checkEmailToken(cleanEmail, emailToken)) return res.status(400).json({ error: { message: 'Please verify your email address first.' } });
     if (!isFinite(Number(lat)) || !isFinite(Number(lon))) return res.status(400).json({ error: { message: 'Missing location.' } });
+
+    const prev = await hasuraGql(`query($e:String!){ weather_alerts(where:{endpoint:{_eq:$e}}){ email } }`, { e: subscription.endpoint });
+    const before = prev.weather_alerts[0];
+    const isNew = !before;
+    const emailChanged = !before || (before.email || '') !== cleanEmail;
+
     await hasuraGql(
       `mutation($o: weather_alerts_insert_input!){
         insert_weather_alerts_one(object:$o, on_conflict:{constraint: weather_alerts_endpoint_key,
           update_columns:[subscription,email,lat,lon,place,rain_on,water_on]}){ id } }`,
-      { o: { endpoint: subscription.endpoint, subscription, email: email || null,
+      { o: { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
              lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
              rain_on: rain !== false, water_on: water !== false } });
-    pushWeather({ subscription, endpoint: subscription.endpoint },
-      { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Rain alerts and hourly water reminders are now active.' })
-      .catch(e => console.error('Welcome push failed:', e.message));
+
+    // Welcome push only the first time (not on every page load)
+    if (isNew) {
+      pushWeather({ subscription, endpoint: subscription.endpoint },
+        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and hourly water reminders are now active.' })
+        .catch(e => console.error('Welcome push failed:', e.message));
+    }
+
+    // Welcome email when alerts are turned on, or when the email was changed
+    if (cleanEmail && emailChanged && emailConfigured()) {
+      const where = String(place || 'your area').slice(0, 80);
+      fetchDayForecast(Number(lat), Number(lon)).then(f => {
+        const m = dayMessage(f, where);
+        return sendMail({
+          to: cleanEmail,
+          subject: '🔔 Agrinova weather alerts are on',
+          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Hourly water reminders on your phone (6 AM to 8 PM)\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
+        });
+      }).catch(e => console.error('Welcome email failed:', e.message));
+    }
+
     res.json({ ok: true });
   } catch (e) {
     console.error('Weather subscribe failed:', e.message);
@@ -1303,9 +1473,9 @@ let wxBusy = false;
 async function runWeatherAlerts() {
   if (wxBusy) return { skipped: true };
   wxBusy = true;
-  const stats = { subscribers: 0, rain: 0, water: 0, emails: 0, errors: 0 };
+  const stats = { subscribers: 0, daily: 0, rain: 0, water: 0, emails: 0, errors: 0 };
   try {
-    const data = await hasuraGql(`query { weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key } }`);
+    const data = await hasuraGql(`query { weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key } }`);
     const rows = data.weather_alerts || [];
     stats.subscribers = rows.length;
     const { date, hour } = istNow();
@@ -1315,6 +1485,23 @@ async function runWeatherAlerts() {
     for (const row of rows) {
       try {
         const set = {};
+        const rainKey = `${date}:${Math.floor(hour / 3)}`;
+
+        // Morning weather message (sunny / cloudy / rain / heat): push + email, once per day, 6 AM to 11 AM IST
+        if (row.rain_on && hour >= 6 && hour <= 11 && row.last_daily_key !== date) {
+          const dk = 'd|' + row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
+          if (!memo.has(dk)) memo.set(dk, fetchDayForecast(row.lat, row.lon));
+          const m = dayMessage(await memo.get(dk), row.place);
+          const ok = await pushWeather(row, { tag: 'wx-daily', title: m.title, body: m.body });
+          if (ok) {
+            set.last_daily_key = date; stats.daily++;
+            if (m.kind === 'rain' || m.kind === 'storm') { set.last_rain_key = rainKey; row.last_rain_key = rainKey; } // avoid a second rain mail right after
+            if (row.email && emailConfigured()) {
+              sendMail({ to: row.email, subject: m.title, text: `${m.body}\n\nOpen Agrinova Weather for the full forecast.` })
+                .then(() => { stats.emails++; }).catch(e => console.error('Daily email failed:', e.message));
+            }
+          }
+        }
 
         // Rain alert: push + email, once per 3-hour block
         if (row.rain_on) {
@@ -1329,7 +1516,6 @@ async function runWeatherAlerts() {
               if (p >= 60 || (h.precipitation[x] || 0) >= 0.5) { if (!startAt) startAt = h.time[x].slice(11, 16); }
               maxP = Math.max(maxP, p); mm += h.precipitation[x] || 0;
             }
-            const rainKey = `${date}:${Math.floor(hour / 3)}`;
             if (startAt && row.last_rain_key !== rainKey) {
               const place = row.place || 'your area';
               const title = `🌧️ Rain expected near ${place}`;
@@ -1337,14 +1523,9 @@ async function runWeatherAlerts() {
               const ok = await pushWeather(row, { tag: 'wx-rain', title, body });
               if (ok) {
                 set.last_rain_key = rainKey; stats.rain++;
-                const mailer = getMailer();
-                if (mailer && row.email) {
-                  mailer.sendMail({
-                    from: `"Agrinova Weather" <${process.env.SMTP_USER}>`,
-                    to: row.email, subject: title,
-                    text: `${body}\n\nOpen Agrinova Weather for the full forecast.`
-                  }).catch(e => console.error('Email failed:', e.message));
-                  stats.emails++;
+                if (row.email && emailConfigured()) {
+                  sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` })
+                    .then(() => { stats.emails++; }).catch(e => console.error('Rain email failed:', e.message));
                 }
               }
             }
@@ -1543,6 +1724,10 @@ app.get('/api/health', async (req, res) => {
     dataGov: !!DATA_GOV_API_KEY,
     push: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
     email: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+    emailApi: !!String(process.env.BREVO_API_KEY || '').trim(),
+    emailFrom: !!String(process.env.EMAIL_FROM || '').trim(),
+    hasuraUrlSet: !!String(process.env.HASURA_GRAPHQL_URL || '').trim(),
+    hasuraSecretSet: !!String(process.env.HASURA_ADMIN_SECRET || '').trim(),
     hasura: false
   };
   try {
