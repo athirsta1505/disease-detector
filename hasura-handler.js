@@ -1108,7 +1108,7 @@ async function pushTo(row, payload) {
     return true;
   } catch (e) {
     if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
-      await hasuraGql(`mutation($e:String!){delete_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      await hasuraGql(`mutation($e:String!){delete_agri_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
       return false;
     }
     throw e;
@@ -1121,8 +1121,8 @@ async function runIrrigationChecks() {
   alertRunBusy = true;
   const stats = { subscribers: 0, sent: 0, removed: 0, errors: 0 };
   try {
-    const data = await hasuraGql(`query { irrigation_alerts { id endpoint subscription config last_key irrigated_on } }`);
-    const rows = data.irrigation_alerts || [];
+    const data = await hasuraGql(`query { agri_irrigation_alerts { id endpoint subscription config last_key irrigated_on } }`);
+    const rows = data.agri_irrigation_alerts || [];
     stats.subscribers = rows.length;
     const { hour } = istNow();
     const memo = new Map();
@@ -1134,7 +1134,7 @@ async function runIrrigationChecks() {
         if (!d) continue;
         const ok = await pushTo(row, Object.assign({ tag: 'irrigation-' + d.type }, buildAlertMessage(d.type, plan, c)));
         if (!ok) { stats.removed++; continue; }
-        await hasuraGql(`mutation($id:uuid!,$k:String!){update_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
+        await hasuraGql(`mutation($id:uuid!,$k:String!){update_agri_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
         stats.sent++;
       } catch (e) {
         stats.errors++;
@@ -1163,8 +1163,8 @@ app.post('/api/irrigation/subscribe', async (req, res) => {
     const c = normalizeAlertConfig(config);
 
     await hasuraGql(
-      `mutation($o: irrigation_alerts_insert_input!){
-         insert_irrigation_alerts_one(object:$o, on_conflict:{constraint: irrigation_alerts_endpoint_key, update_columns:[subscription, config]}){ id }
+      `mutation($o: agri_irrigation_alerts_insert_input!){
+         insert_agri_irrigation_alerts_one(object:$o, on_conflict:{constraint: irrigation_alerts_endpoint_key, update_columns:[subscription, config]}){ id }
        }`,
       { o: { endpoint: subscription.endpoint, subscription, config: c } }
     );
@@ -1188,7 +1188,7 @@ app.post('/api/irrigation/unsubscribe', async (req, res) => {
   try {
     const endpoint = req.body && req.body.endpoint;
     if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
-    await hasuraGql(`mutation($e:String!){delete_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    await hasuraGql(`mutation($e:String!){delete_agri_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
@@ -1200,7 +1200,7 @@ app.post('/api/irrigation/done', async (req, res) => {
   try {
     const endpoint = req.body && req.body.endpoint;
     if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
-    await hasuraGql(`mutation($e:String!,$d:String!){update_irrigation_alerts(where:{endpoint:{_eq:$e}},_set:{irrigated_on:$d}){affected_rows}}`,
+    await hasuraGql(`mutation($e:String!,$d:String!){update_agri_irrigation_alerts(where:{endpoint:{_eq:$e}},_set:{irrigated_on:$d}){affected_rows}}`,
       { e: endpoint, d: istNow().date });
     res.json({ ok: true });
   } catch (e) {
@@ -1226,7 +1226,7 @@ if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process
 
 /* ===================== WEATHER ALERTS (daily weather message, rain push + email, hourly water reminder) ===================== */
 // Used by weather.html "Notifications" card.
-// Needs: Hasura table "weather_alerts" (columns incl. last_daily_key text), and for emails
+// Needs: Hasura table "agri_weather_alerts" (columns incl. last_daily_key text), and for emails
 // BREVO_API_KEY + EMAIL_FROM (Render free blocks SMTP) or SMTP_USER + SMTP_PASS (Gmail, paid plans / local PC).
 let _mailer;
 function getMailer() {
@@ -1251,7 +1251,7 @@ async function pushWeather(row, payload) {
     return true;
   } catch (e) {
     if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
-      await hasuraGql(`mutation($e:String!){delete_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      await hasuraGql(`mutation($e:String!){delete_agri_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
       return false;
     }
     throw e;
@@ -1405,14 +1405,14 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
     if (cleanEmail && !checkEmailToken(cleanEmail, emailToken)) return res.status(400).json({ error: { message: 'Please verify your email address first.' } });
     if (!isFinite(Number(lat)) || !isFinite(Number(lon))) return res.status(400).json({ error: { message: 'Missing location.' } });
 
-    const prev = await hasuraGql(`query($e:String!){ weather_alerts(where:{endpoint:{_eq:$e}}){ email } }`, { e: subscription.endpoint });
-    const before = prev.weather_alerts[0];
+    const prev = await hasuraGql(`query($e:String!){ agri_weather_alerts(where:{endpoint:{_eq:$e}}){ email } }`, { e: subscription.endpoint });
+    const before = prev.agri_weather_alerts[0];
     const isNew = !before;
     const emailChanged = !before || (before.email || '') !== cleanEmail;
 
     await hasuraGql(
-      `mutation($o: weather_alerts_insert_input!){
-        insert_weather_alerts_one(object:$o, on_conflict:{constraint: weather_alerts_endpoint_key,
+      `mutation($o: agri_weather_alerts_insert_input!){
+        insert_agri_weather_alerts_one(object:$o, on_conflict:{constraint: weather_alerts_endpoint_key,
           update_columns:[subscription,email,lat,lon,place,rain_on,water_on]}){ id } }`,
       { o: { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
              lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
@@ -1449,7 +1449,7 @@ app.post('/api/weather-alerts/unsubscribe', async (req, res) => {
   try {
     const endpoint = req.body && req.body.endpoint;
     if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
-    await hasuraGql(`mutation($e:String!){delete_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    await hasuraGql(`mutation($e:String!){delete_agri_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
@@ -1475,8 +1475,8 @@ async function runWeatherAlerts() {
   wxBusy = true;
   const stats = { subscribers: 0, daily: 0, rain: 0, water: 0, emails: 0, errors: 0 };
   try {
-    const data = await hasuraGql(`query { weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key } }`);
-    const rows = data.weather_alerts || [];
+    const data = await hasuraGql(`query { agri_weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key } }`);
+    const rows = data.agri_weather_alerts || [];
     stats.subscribers = rows.length;
     const { date, hour } = istNow();
     const nowKey = `${date}T${String(hour).padStart(2, '0')}:00`;
@@ -1543,7 +1543,7 @@ async function runWeatherAlerts() {
         }
 
         if (Object.keys(set).length) {
-          await hasuraGql(`mutation($id:uuid!,$s:weather_alerts_set_input!){update_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
+          await hasuraGql(`mutation($id:uuid!,$s:agri_weather_alerts_set_input!){update_agri_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
         }
       } catch (e) {
         stats.errors++;
@@ -1668,7 +1668,7 @@ function chatGuard(req, res, next) {
 
 async function ownsChat(id, owner) {
   const d = await hasuraGql(
-    `query($id:uuid!,$o:String!){ chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
+    `query($id:uuid!,$o:String!){ chats: agri_chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
     { id, o: owner });
   return d.chats[0] || null;
 }
@@ -1680,7 +1680,7 @@ const notFound = res => res.status(404).json({ error: { message: 'Chat not found
 app.get('/api/chats', chatGuard, async (req, res) => {
   try {
     const d = await hasuraGql(
-      `query($o:String!){ chats(where:{owner:{_eq:$o}}, order_by:{updated_at:desc}, limit:50){ id title created_at } }`,
+      `query($o:String!){ chats: agri_chats(where:{owner:{_eq:$o}}, order_by:{updated_at:desc}, limit:50){ id title created_at } }`,
       { o: req.owner });
     res.json({ chats: d.chats });
   } catch (e) { chatErr(res, e); }
@@ -1690,7 +1690,7 @@ app.get('/api/chats', chatGuard, async (req, res) => {
 app.post('/api/chats', chatGuard, async (req, res) => {
   try {
     const d = await hasuraGql(
-      `mutation($o:chats_insert_input!){ insert_chats_one(object:$o){ id title created_at } }`,
+      `mutation($o:agri_chats_insert_input!){ insert_chats_one: insert_agri_chats_one(object:$o){ id title created_at } }`,
       { o: {
           owner: req.owner,
           title: 'New chat',
@@ -1706,7 +1706,7 @@ app.get('/api/chats/:id/messages', chatGuard, async (req, res) => {
   try {
     if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
     const d = await hasuraGql(
-      `query($id:uuid!){ chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
+      `query($id:uuid!){ chat_messages: agri_chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
       { id: req.params.id });
     res.json({ messages: d.chat_messages });
   } catch (e) { chatErr(res, e); }
@@ -1728,9 +1728,9 @@ app.post('/api/chats/:id/messages', chatGuard, async (req, res) => {
       if (first) set.title = first.message.replace(/\s+/g, ' ').trim().slice(0, 32);
     }
     await hasuraGql(
-      `mutation($o:[chat_messages_insert_input!]!,$id:uuid!,$s:chats_set_input!){
-         insert_chat_messages(objects:$o){ affected_rows }
-         update_chats_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
+      `mutation($o:[agri_chat_messages_insert_input!]!,$id:uuid!,$s:agri_chats_set_input!){
+         insert_agri_chat_messages(objects:$o){ affected_rows }
+         update_agri_chats_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
       { o: objects, id: req.params.id, s: set });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
@@ -1741,7 +1741,7 @@ app.post('/api/chats/:id/rename', chatGuard, async (req, res) => {
     const title = String(req.body.title || '').trim().slice(0, 60);
     if (!title) return res.status(400).json({ error: { message: 'Title is empty.' } });
     if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
-    await hasuraGql(`mutation($id:uuid!,$t:String!){ update_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
+    await hasuraGql(`mutation($id:uuid!,$t:String!){ update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
       { id: req.params.id, t: title });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
@@ -1753,8 +1753,8 @@ app.post('/api/chats/:id/clear', chatGuard, async (req, res) => {
     if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
     await hasuraGql(
       `mutation($id:uuid!){
-         delete_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
-         update_chats_by_pk(pk_columns:{id:$id}, _set:{title:"New chat"}){ id } }`,
+         delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:"New chat"}){ id } }`,
       { id: req.params.id });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
@@ -1766,10 +1766,47 @@ app.post('/api/chats/:id/delete', chatGuard, async (req, res) => {
     if (!(await ownsChat(req.params.id, req.owner))) return res.json({ ok: true });
     await hasuraGql(
       `mutation($id:uuid!){
-         delete_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
-         delete_chats_by_pk(id:$id){ id } }`,
+         delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         delete_agri_chats_by_pk(id:$id){ id } }`,
       { id: req.params.id });
     res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Disease diagnoses history (saved through the backend, browser never touches the DB) ----
+app.use('/api/diagnoses', rateLimit(30, 60 * 1000));
+
+app.post('/api/diagnoses', chatGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const str = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
+    const int = v => (typeof v === 'number' && isFinite(v)) ? Math.round(v) : null;
+    await hasuraGql(
+      `mutation($o: agri_diagnoses_insert_input!){ insert_agri_diagnoses_one(object:$o){ id } }`,
+      { o: {
+          owner: req.owner,
+          disease_name: str(b.diseaseName, 200),
+          latin_name: str(b.latinName, 200),
+          crop: str(b.crop, 100),
+          status: str(b.status, 40),
+          confidence: int(b.confidence),
+          severity: int(b.severity),
+          description: str(b.description, 4000),
+          actions: Array.isArray(b.actions) ? b.actions.slice(0, 10).map(a => String(a).slice(0, 500)) : [],
+          note: str(b.note, 2000),
+          farmer_name: str(b.name, 80),
+          farmer_email: str(b.email, 120)
+      } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/diagnoses', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ diagnoses: agri_diagnoses(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:50){ id disease_name crop status confidence severity created_at } }`,
+      { o: req.owner });
+    res.json({ diagnoses: d.diagnoses });
   } catch (e) { chatErr(res, e); }
 });
 
