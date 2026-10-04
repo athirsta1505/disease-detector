@@ -1816,6 +1816,84 @@ app.get('/api/diagnoses', chatGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Owner check for endpoints whose ids are numbers (not uuids) ----
+function ownerGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  req.owner = raw;
+  next();
+}
+const numOrNull = v => (v === '' || v == null || !isFinite(Number(v))) ? null : Number(v);
+const txt = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
+
+// ---- Profit calculator history ----
+app.use(['/api/calculations', '/api/feedback'], rateLimit(30, 60 * 1000));
+
+app.get('/api/calculations', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ calculations: agri_profit_calculations(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id crop area season district expense revenue profit percentage created_at } }`,
+      { o: req.owner });
+    res.json({ calculations: d.calculations });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const d = await hasuraGql(
+      `mutation($o: agri_profit_calculations_insert_input!){ insert_agri_profit_calculations_one(object:$o){ id created_at } }`,
+      { o: {
+          owner: req.owner,
+          crop: txt(b.crop, 100), season: txt(b.season, 60), district: txt(b.district, 80),
+          area: numOrNull(b.area), expense: numOrNull(b.expense), revenue: numOrNull(b.revenue),
+          profit: numOrNull(b.profit), percentage: numOrNull(b.percentage)
+      } });
+    res.json({ id: d.insert_agri_profit_calculations_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_profit_calculations(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations/clear', ownerGuard, async (req, res) => {
+  try {
+    await hasuraGql(
+      `mutation($o:String!){ delete_agri_profit_calculations(where:{owner:{_eq:$o}}){ affected_rows } }`,
+      { o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Feedback (anonymous allowed: owner falls back to "anonymous") ----
+app.post('/api/feedback', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const message = txt(b.message, 4000);
+    if (!message) return res.status(400).json({ error: { message: 'Feedback is empty.' } });
+    const rating = numOrNull(b.rating);
+    await hasuraGql(
+      `mutation($o: agri_farmer_feedback_insert_input!){ insert_agri_farmer_feedback_one(object:$o){ id } }`,
+      { o: {
+          owner: req.owner,
+          farmer_name: txt(b.name, 80),
+          module: txt(b.module, 60) || 'general',
+          rating: rating >= 1 && rating <= 5 ? Math.round(rating) : null,
+          message
+      } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
