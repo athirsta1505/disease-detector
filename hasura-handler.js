@@ -1140,7 +1140,7 @@ async function runIrrigationChecks() {
         if (!d) continue;
         const ok = await pushTo(row, Object.assign({ tag: 'irrigation-' + d.type }, buildAlertMessage(d.type, plan, c)));
         if (!ok) { stats.removed++; continue; }
-        await hasuraGql(`mutation($id:uuid!,$k:String!){update_agri_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
+        await hasuraGql(`mutation($id:Int!,$k:String!){update_agri_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
         stats.sent++;
       } catch (e) {
         stats.errors++;
@@ -1549,7 +1549,7 @@ async function runWeatherAlerts() {
         }
 
         if (Object.keys(set).length) {
-          await hasuraGql(`mutation($id:uuid!,$s:agri_weather_alerts_set_input!){update_agri_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
+          await hasuraGql(`mutation($id:Int!,$s:agri_weather_alerts_set_input!){update_agri_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
         }
       } catch (e) {
         stats.errors++;
@@ -1667,14 +1667,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function chatGuard(req, res, next) {
   const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
   if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
-  if (req.params.id && !UUID_RE.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+  if (req.params.id) {
+    if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+    req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
+  }
   req.owner = raw;
   next();
 }
 
 async function ownsChat(id, owner) {
   const d = await hasuraGql(
-    `query($id:uuid!,$o:String!){ chats: agri_chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
+    `query($id:Int!,$o:String!){ chats: agri_chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
     { id, o: owner });
   return d.chats[0] || null;
 }
@@ -1710,10 +1713,10 @@ app.post('/api/chats', chatGuard, async (req, res) => {
 // All messages of one chat
 app.get('/api/chats/:id/messages', chatGuard, async (req, res) => {
   try {
-    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
     const d = await hasuraGql(
-      `query($id:uuid!){ chat_messages: agri_chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
-      { id: req.params.id });
+      `query($id:Int!){ chat_messages: agri_chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
+      { id: req.chatId });
     res.json({ messages: d.chat_messages });
   } catch (e) { chatErr(res, e); }
 });
@@ -1721,12 +1724,12 @@ app.get('/api/chats/:id/messages', chatGuard, async (req, res) => {
 // Save messages: body { owner, messages:[{ sender:'user'|'ai', message }] }. Auto-titles a "New chat".
 app.post('/api/chats/:id/messages', chatGuard, async (req, res) => {
   try {
-    const chat = await ownsChat(req.params.id, req.owner);
+    const chat = await ownsChat(req.chatId, req.owner);
     if (!chat) return notFound(res);
     const objects = (Array.isArray(req.body.messages) ? req.body.messages : [])
       .filter(m => m && (m.sender === 'user' || m.sender === 'ai') && String(m.message || '').trim())
       .slice(0, 20)
-      .map(m => ({ chat_id: req.params.id, sender: m.sender, message: String(m.message).slice(0, 8000) }));
+      .map(m => ({ chat_id: req.chatId, sender: m.sender, message: String(m.message).slice(0, 8000) }));
     if (!objects.length) return res.json({ ok: true });
     const set = { updated_at: 'now()' };
     if (chat.title === 'New chat') {
@@ -1734,10 +1737,10 @@ app.post('/api/chats/:id/messages', chatGuard, async (req, res) => {
       if (first) set.title = first.message.replace(/\s+/g, ' ').trim().slice(0, 32);
     }
     await hasuraGql(
-      `mutation($o:[agri_chat_messages_insert_input!]!,$id:uuid!,$s:agri_chats_set_input!){
+      `mutation($o:[agri_chat_messages_insert_input!]!,$id:Int!,$s:agri_chats_set_input!){
          insert_agri_chat_messages(objects:$o){ affected_rows }
          update_agri_chats_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
-      { o: objects, id: req.params.id, s: set });
+      { o: objects, id: req.chatId, s: set });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
 });
@@ -1746,9 +1749,9 @@ app.post('/api/chats/:id/rename', chatGuard, async (req, res) => {
   try {
     const title = String(req.body.title || '').trim().slice(0, 60);
     if (!title) return res.status(400).json({ error: { message: 'Title is empty.' } });
-    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
-    await hasuraGql(`mutation($id:uuid!,$t:String!){ update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
-      { id: req.params.id, t: title });
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
+    await hasuraGql(`mutation($id:Int!,$t:String!){ update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
+      { id: req.chatId, t: title });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
 });
@@ -1756,12 +1759,12 @@ app.post('/api/chats/:id/rename', chatGuard, async (req, res) => {
 // "Clear" button: remove the messages of this chat and reset its title
 app.post('/api/chats/:id/clear', chatGuard, async (req, res) => {
   try {
-    if (!(await ownsChat(req.params.id, req.owner))) return notFound(res);
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
     await hasuraGql(
-      `mutation($id:uuid!){
+      `mutation($id:Int!){
          delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
          update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:"New chat"}){ id } }`,
-      { id: req.params.id });
+      { id: req.chatId });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
 });
@@ -1769,12 +1772,12 @@ app.post('/api/chats/:id/clear', chatGuard, async (req, res) => {
 // Delete a chat and its messages
 app.post('/api/chats/:id/delete', chatGuard, async (req, res) => {
   try {
-    if (!(await ownsChat(req.params.id, req.owner))) return res.json({ ok: true });
+    if (!(await ownsChat(req.chatId, req.owner))) return res.json({ ok: true });
     await hasuraGql(
-      `mutation($id:uuid!){
+      `mutation($id:Int!){
          delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
          delete_agri_chats_by_pk(id:$id){ id } }`,
-      { id: req.params.id });
+      { id: req.chatId });
     res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
 });
