@@ -1951,17 +1951,22 @@ app.post('/api/soil-reports', ownerGuard, async (req, res) => {
       land_area: numOrNull(b.landArea), ph: numOrNull(b.ph),
       nitrogen: numOrNull(b.nitrogen), phosphorus: numOrNull(b.phosphorus), potassium: numOrNull(b.potassium)
     };
-    const log = {
-      owner: req.owner, module: 'soil_information', action: 'analyze',
-      input: { state: rec.state, district: rec.district, soil_type: rec.soil_type, land_area: rec.land_area,
-               ph: rec.ph, nitrogen: rec.nitrogen, phosphorus: rec.phosphorus, potassium: rec.potassium }
-    };
     const d = await hasuraGql(
-      `mutation($r: agri_soil_reports_insert_input!, $l: agri_farmer_activity_log_insert_input!){
-         insert_agri_soil_reports_one(object:$r){ id }
-         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
-      { r: rec, l: log });
-    res.json({ id: d.insert_agri_soil_reports_one.id });
+      `mutation($r: agri_soil_reports_insert_input!){ insert_agri_soil_reports_one(object:$r){ id } }`,
+      { r: rec });
+    const reportId = d.insert_agri_soil_reports_one.id;
+    // activity log is secondary: it links back to the saved report, and never blocks the save
+    try {
+      await hasuraGql(
+        `mutation($l: agri_farmer_activity_log_insert_input!){ insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+        { l: {
+            owner: req.owner, module: 'soil_information', action: 'analyze',
+            input: { state: rec.state, district: rec.district, soil_type: rec.soil_type, land_area: rec.land_area,
+                     ph: rec.ph, nitrogen: rec.nitrogen, phosphorus: rec.phosphorus, potassium: rec.potassium },
+            result: { report_id: reportId, soil_type: rec.soil_type }
+        } });
+    } catch (logErr) { console.error('Activity log failed:', logErr.message); }
+    res.json({ id: reportId });
   } catch (e) { chatErr(res, e); }
 });
 
