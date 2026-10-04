@@ -54,25 +54,43 @@ app.use(['/api/chat', '/api/chat-image', '/api/fertilizer', '/api/market-price',
 app.use('/api/weather-alerts/email', rateLimit(10, 60 * 1000));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-3.6-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+// Used only when the main model keeps answering "high demand" (503/429). Set GEMINI_FALLBACK_MODEL in Render to change it.
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+
+// Calls Gemini; retries busy errors (429/500/503/504) with a short wait, then tries the fallback model.
+async function geminiFetch(body, timeoutMs) {
+  const busy = new Set([429, 500, 502, 503, 504]);
+  const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
+    .filter((m, i, a) => m && (i < 3 || a[0] !== m));
+  let lastData = null, lastStatus = 0;
+  for (let i = 0; i < plan.length; i++) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${plan[i]}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs || 30000)
+      }
+    );
+    let data = null;
+    try { data = await response.json(); } catch (_) { data = {}; }
+    if (response.ok) return { response, data };
+    lastData = data; lastStatus = response.status;
+    if (!busy.has(response.status)) break;                 // real error (bad key, bad request...) - don't retry
+    if (i < plan.length - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+  }
+  const err = new Error((lastData && lastData.error && lastData.error.message) || 'The AI service returned an error.');
+  err.status = lastStatus;
+  throw err;
+}
 
 async function callGemini(parts, maxTokens = 700) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { maxOutputTokens: maxTokens }
-      })
-    }
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    const err = new Error((data.error && data.error.message) || 'The AI service returned an error.');
-    throw err;
-  }
+  const { data } = await geminiFetch({
+    contents: [{ parts }],
+    generationConfig: { maxOutputTokens: maxTokens }
+  }, 60000);
   const text = data.candidates &&
     data.candidates[0] &&
     data.candidates[0].content &&
@@ -88,23 +106,11 @@ async function callGemini(parts, maxTokens = 700) {
 /* Gemini WITH Google Search grounding — reads today's prices from the web.
    (JSON mode can't be combined with search, so the caller parses the text.) */
 async function callGeminiGrounded(parts, maxTokens = 1000) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: maxTokens }
-      }),
-      signal: AbortSignal.timeout(30000)
-    }
-  );
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error((data.error && data.error.message) || 'Search-grounded request failed.');
-  }
+  const { data } = await geminiFetch({
+    contents: [{ parts }],
+    tools: [{ google_search: {} }],
+    generationConfig: { maxOutputTokens: maxTokens }
+  }, 30000);
   const cand = data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts
     ? cand.content.parts.map(p => p.text || '').join('')
