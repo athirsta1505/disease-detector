@@ -2058,6 +2058,43 @@ app.post('/api/fertilizer-usage/delete', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Market price searches (also logged in the activity log) ----
+app.use('/api/market-searches', rateLimit(40, 60 * 1000));
+
+app.post('/api/market-searches', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      state: txt(b.state, 80), district: txt(b.district, 80), market: txt(b.market, 120), crop: txt(b.crop, 100),
+      quantity_kg: numOrNull(b.qty),
+      min_price: numOrNull(b.min), max_price: numOrNull(b.max), modal_price: numOrNull(b.modal),
+      unit: txt(b.unit, 40), source: txt(b.source, 20), price_date: txt(b.priceDate, 40)
+    };
+    const log = {
+      owner: req.owner, module: 'market_prices', action: 'view_price',
+      input: { state: rec.state, district: rec.district, market: rec.market, crop: rec.crop, quantity_kg: rec.quantity_kg },
+      result: { min: rec.min_price, max: rec.max_price, modal: rec.modal_price, unit: rec.unit, source: rec.source }
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_market_price_searches_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_market_price_searches_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_market_price_searches_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/market-searches', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ searches: agri_market_price_searches(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:30){
+         id state district market crop quantity_kg min_price max_price modal_price unit source price_date created_at } }`,
+      { o: req.owner });
+    res.json({ searches: d.searches });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
