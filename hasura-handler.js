@@ -1897,6 +1897,48 @@ app.post('/api/feedback', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Crop recommendation history (also logged in the activity log) ----
+app.use('/api/crop-recommendations', rateLimit(30, 60 * 1000));
+
+app.post('/api/crop-recommendations', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      soil: txt(b.soil, 40), weather: txt(b.weather, 40), water: txt(b.water, 40),
+      season: txt(b.season, 40), district: txt(b.district, 80),
+      temperature: numOrNull(b.temperature), rainfall: numOrNull(b.rainfall),
+      recommended_crop: txt(b.crop, 100), fertilizer: txt(b.fertilizer, 200),
+      irrigation: txt(b.irrigation, 100), harvest_time: txt(b.harvest, 60),
+      expected_yield: txt(b.expectedYield, 80), expected_profit: txt(b.profit, 60),
+      suitability: txt(b.suitability, 20), other_crops: txt(b.otherCrops, 200), tip: txt(b.tip, 600)
+    };
+    const log = {
+      owner: req.owner, module: 'crop_recommendation', action: 'recommend',
+      input: { soil: rec.soil, weather: rec.weather, water: rec.water, season: rec.season,
+               district: rec.district, temperature: rec.temperature, rainfall: rec.rainfall },
+      result: { crop: rec.recommended_crop, suitability: rec.suitability }
+    };
+    // both inserts run in one transaction
+    const d = await hasuraGql(
+      `mutation($r: agri_crop_advisory_records_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_crop_advisory_records_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_crop_advisory_records_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/crop-recommendations', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ recommendations: agri_crop_advisory_records(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id recommended_crop suitability soil season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
+      { o: req.owner });
+    res.json({ recommendations: d.recommendations });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
