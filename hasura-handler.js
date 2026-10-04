@@ -1975,6 +1975,89 @@ app.get('/api/soil-reports', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Fertilizer advice + usage history ----
+app.use(['/api/fertilizer-advice', '/api/fertilizer-usage'], rateLimit(40, 60 * 1000));
+const dateOrNull = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : null;
+
+app.post('/api/fertilizer-advice', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      crop: txt(b.crop, 60), soil: txt(b.soil, 60), area: numOrNull(b.area),
+      n_level: txt(b.nLevel, 20), p_level: txt(b.pLevel, 20), k_level: txt(b.kLevel, 20),
+      recommended_fertilizer: txt(b.recommended, 600), quantity: txt(b.quantity, 60),
+      plan: Array.isArray(b.plan) ? b.plan.slice(0, 12).map(r => ({ fertilizer: txt(r && r.fertilizer, 80), kg: numOrNull(r && r.kg) })) : []
+    };
+    const log = {
+      owner: req.owner, module: 'fertilizer', action: 'recommend',
+      input: { crop: rec.crop, soil: rec.soil, area: rec.area, n: rec.n_level, p: rec.p_level, k: rec.k_level },
+      result: { recommended: rec.recommended_fertilizer, quantity: rec.quantity }
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_fertilizer_advisories_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_fertilizer_advisories_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_fertilizer_advisories_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/fertilizer-usage', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ usage: agri_fertilizer_usage(where:{owner:{_eq:$o}}, order_by:{id:asc}, limit:200){
+         id used_on crop_key fert_keys quantity rating notes } }`,
+      { o: req.owner });
+    res.json({ usage: d.usage });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const row = {
+      owner: req.owner,
+      crop_key: txt(b.cropV, 60),
+      fert_keys: Array.isArray(b.fertVs) ? b.fertVs.slice(0, 20).map(x => String(x).slice(0, 60)) : [],
+      quantity: txt(b.qty, 120),
+      rating: numOrNull(b.rating) || 0,
+      notes: txt(b.notes, 1000) || ''
+    };
+    const day = dateOrNull(b.date);
+    if (day) row.used_on = day;
+    const d = await hasuraGql(
+      `mutation($r: agri_fertilizer_usage_insert_input!){ insert_agri_fertilizer_usage_one(object:$r){ id } }`,
+      { r: row });
+    res.json({ id: d.insert_agri_fertilizer_usage_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage/update', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = parseInt(b.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    const rating = Math.max(0, Math.min(5, Math.round(numOrNull(b.rating) || 0)));
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!,$s: agri_fertilizer_usage_set_input!){
+         update_agri_fertilizer_usage(where:{id:{_eq:$id},owner:{_eq:$o}}, _set:$s){ affected_rows } }`,
+      { id, o: req.owner, s: { rating, notes: txt(b.notes, 1000) || '' } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_fertilizer_usage(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
