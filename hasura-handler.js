@@ -2100,6 +2100,49 @@ app.get('/api/market-searches', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Saved government schemes (bookmarks) ----
+app.use('/api/scheme-bookmarks', rateLimit(40, 60 * 1000));
+
+app.get('/api/scheme-bookmarks', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ bookmarks: agri_scheme_bookmarks(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:100){
+         id scheme_id name category link benefits status created_at } }`,
+      { o: req.owner });
+    res.json({ bookmarks: d.bookmarks });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/scheme-bookmarks', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = txt(b.name, 200);
+    if (!name) return res.status(400).json({ error: { message: 'Scheme name is missing.' } });
+    const row = {
+      owner: req.owner,
+      scheme_id: name.toLowerCase().replace(/\s+/g, ' ').slice(0, 200),   // schemes have no id, the name is the key
+      name, category: txt(b.category, 30), link: txt(b.link, 500), benefits: txt(b.benefits, 600),
+      status: b.status === 'applied' ? 'applied' : 'saved'
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_scheme_bookmarks_insert_input!){
+         insert_agri_scheme_bookmarks_one(object:$r, on_conflict:{constraint: scheme_bookmarks_owner_scheme_id_key, update_columns:[status]}){ id } }`,
+      { r: row });
+    res.json({ id: d.insert_agri_scheme_bookmarks_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/scheme-bookmarks/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_scheme_bookmarks(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
