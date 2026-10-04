@@ -1939,6 +1939,42 @@ app.get('/api/crop-recommendations', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Soil reports (also logged in the activity log) ----
+app.use('/api/soil-reports', rateLimit(30, 60 * 1000));
+
+app.post('/api/soil-reports', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      state: txt(b.state, 80), district: txt(b.district, 80), soil_type: txt(b.soilType, 40),
+      land_area: numOrNull(b.landArea), ph: numOrNull(b.ph),
+      nitrogen: numOrNull(b.nitrogen), phosphorus: numOrNull(b.phosphorus), potassium: numOrNull(b.potassium)
+    };
+    const log = {
+      owner: req.owner, module: 'soil_information', action: 'analyze',
+      input: { state: rec.state, district: rec.district, soil_type: rec.soil_type, land_area: rec.land_area,
+               ph: rec.ph, nitrogen: rec.nitrogen, phosphorus: rec.phosphorus, potassium: rec.potassium }
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_soil_reports_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_soil_reports_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_soil_reports_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/soil-reports', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ reports: agri_soil_reports(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id state district soil_type land_area ph nitrogen phosphorus potassium created_at } }`,
+      { o: req.owner });
+    res.json({ reports: d.reports });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
