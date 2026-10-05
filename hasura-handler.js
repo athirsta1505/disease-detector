@@ -1416,13 +1416,20 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
     const isNew = !before;
     const emailChanged = !before || (before.email || '') !== cleanEmail;
 
-    await hasuraGql(
-      `mutation($o: agri_weather_alerts_insert_input!){
-        insert_agri_weather_alerts_one(object:$o, on_conflict:{constraint: weather_alerts_endpoint_key,
-          update_columns:[subscription,email,lat,lon,place,rain_on,water_on]}){ id } }`,
-      { o: { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
-             lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
-             rain_on: rain !== false, water_on: water !== false } });
+    const wxRow = { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
+                    lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
+                    rain_on: rain !== false, water_on: water !== false };
+    if (before) {
+      // already subscribed: update it (no unique-constraint name needed)
+      const { endpoint: _ep, ...changes } = wxRow;
+      await hasuraGql(
+        `mutation($e:String!,$s:agri_weather_alerts_set_input!){ update_agri_weather_alerts(where:{endpoint:{_eq:$e}}, _set:$s){ affected_rows } }`,
+        { e: subscription.endpoint, s: changes });
+    } else {
+      await hasuraGql(
+        `mutation($o: agri_weather_alerts_insert_input!){ insert_agri_weather_alerts_one(object:$o){ id } }`,
+        { o: wxRow });
+    }
 
     // Welcome push only the first time (not on every page load)
     if (isNew) {
@@ -2124,9 +2131,18 @@ app.post('/api/scheme-bookmarks', ownerGuard, async (req, res) => {
       name, category: txt(b.category, 30), link: txt(b.link, 500), benefits: txt(b.benefits, 600),
       status: b.status === 'applied' ? 'applied' : 'saved'
     };
+    const ex = await hasuraGql(
+      `query($o:String!,$s:String!){ agri_scheme_bookmarks(where:{owner:{_eq:$o},scheme_id:{_eq:$s}}, limit:1){ id } }`,
+      { o: row.owner, s: row.scheme_id });
+    if (ex.agri_scheme_bookmarks.length) {
+      const id = ex.agri_scheme_bookmarks[0].id;
+      await hasuraGql(
+        `mutation($id:Int!,$st:String!){ update_agri_scheme_bookmarks_by_pk(pk_columns:{id:$id}, _set:{status:$st}){ id } }`,
+        { id, st: row.status });
+      return res.json({ id });
+    }
     const d = await hasuraGql(
-      `mutation($r: agri_scheme_bookmarks_insert_input!){
-         insert_agri_scheme_bookmarks_one(object:$r, on_conflict:{constraint: scheme_bookmarks_owner_scheme_id_key, update_columns:[status]}){ id } }`,
+      `mutation($r: agri_scheme_bookmarks_insert_input!){ insert_agri_scheme_bookmarks_one(object:$r){ id } }`,
       { r: row });
     res.json({ id: d.insert_agri_scheme_bookmarks_one.id });
   } catch (e) { chatErr(res, e); }
@@ -2150,7 +2166,7 @@ app.get('/api/expenses', ownerGuard, async (req, res) => {
   try {
     const d = await hasuraGql(
       `query($o:String!){ expenses: agri_farm_expenses(where:{owner:{_eq:$o}}, order_by:[{expense_date:desc},{id:desc}], limit:200){
-         id crop category amount expense_date created_at } }`,
+         id crop category amount expense_date note created_at } }`,
       { o: req.owner });
     res.json({ expenses: d.expenses });
   } catch (e) { chatErr(res, e); }
@@ -2164,8 +2180,23 @@ app.post('/api/expenses', ownerGuard, async (req, res) => {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.expense_date || '')) ? b.expense_date : new Date().toISOString().slice(0, 10);
     const d = await hasuraGql(
       `mutation($o: agri_farm_expenses_insert_input!){ insert_agri_farm_expenses_one(object:$o){ id } }`,
-      { o: { owner: req.owner, crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date } });
+      { o: { owner: req.owner, crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date, note: txt(b.note, 200) } });
     res.json({ id: d.insert_agri_farm_expenses_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses/update', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = parseInt(b.id, 10);
+    const amount = numOrNull(b.amount);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    if (amount == null || amount <= 0) return res.status(400).json({ error: { message: 'Enter a valid amount.' } });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.expense_date || '')) ? b.expense_date : new Date().toISOString().slice(0, 10);
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!,$s:agri_farm_expenses_set_input!){ update_agri_farm_expenses(where:{id:{_eq:$id},owner:{_eq:$o}}, _set:$s){ affected_rows } }`,
+      { id, o: req.owner, s: { crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date, note: txt(b.note, 200) } });
+    res.json({ ok: true });
   } catch (e) { chatErr(res, e); }
 });
 
