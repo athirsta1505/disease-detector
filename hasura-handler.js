@@ -2143,6 +2143,83 @@ app.post('/api/scheme-bookmarks/delete', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
+// ---- Farm expense log (table: agri.farm_expenses) ----
+app.use(['/api/expenses', '/api/watchlist'], rateLimit(60, 60 * 1000));
+
+app.get('/api/expenses', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ expenses: agri_farm_expenses(where:{owner:{_eq:$o}}, order_by:[{expense_date:desc},{id:desc}], limit:200){
+         id crop category amount expense_date created_at } }`,
+      { o: req.owner });
+    res.json({ expenses: d.expenses });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const amount = numOrNull(b.amount);
+    if (amount == null || amount <= 0) return res.status(400).json({ error: { message: 'Enter a valid amount.' } });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.expense_date || '')) ? b.expense_date : new Date().toISOString().slice(0, 10);
+    const d = await hasuraGql(
+      `mutation($o: agri_farm_expenses_insert_input!){ insert_agri_farm_expenses_one(object:$o){ id } }`,
+      { o: { owner: req.owner, crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date } });
+    res.json({ id: d.insert_agri_farm_expenses_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_farm_expenses(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Market watchlist (table: agri.market_watchlist) ----
+app.get('/api/watchlist', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ items: agri_market_watchlist(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:50){
+         id crop state district market target_price created_at } }`,
+      { o: req.owner });
+    res.json({ items: d.items });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/watchlist', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const crop = txt(b.crop, 100);
+    if (!crop) return res.status(400).json({ error: { message: 'Crop is missing.' } });
+    const market = txt(b.market, 120) || '';
+    // already there? (no unique constraint needed)
+    const ex = await hasuraGql(
+      `query($o:String!,$c:String!,$m:String!){ agri_market_watchlist(where:{owner:{_eq:$o},crop:{_eq:$c},market:{_eq:$m}}, limit:1){ id } }`,
+      { o: req.owner, c: crop, m: market });
+    if (ex.agri_market_watchlist.length) return res.json({ id: ex.agri_market_watchlist[0].id, existed: true });
+    const d = await hasuraGql(
+      `mutation($o: agri_market_watchlist_insert_input!){ insert_agri_market_watchlist_one(object:$o){ id } }`,
+      { o: { owner: req.owner, crop, market, state: txt(b.state, 80), district: txt(b.district, 80), target_price: numOrNull(b.target_price) } });
+    res.json({ id: d.insert_agri_market_watchlist_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/watchlist/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_market_watchlist(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
 // Health check — open /api/health to see what is configured (never shows secrets)
 app.get('/api/health', async (req, res) => {
   const out = {
