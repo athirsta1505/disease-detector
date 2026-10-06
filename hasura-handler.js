@@ -7,8 +7,12 @@
 //   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
-//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
-//      rain alerts (push + email), welcome email, hourly water reminder
+//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page:
+//        PUSH (free):  daily weather message (6-11 AM), rain alert (once per 3-hour block),
+//                      water reminder 4 times a day (6 AM, 10 AM, 2 PM, 6 PM)
+//        EMAIL (limited, 300 per ~100 days): verification code, heavy-rain alert only
+//                      (max 1 per day, 3 per month, 10 in total per user), password reset OTP.
+//                      A global counter (table agri.email_usage) stops rain emails at 280.
 //  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
@@ -1230,9 +1234,10 @@ if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process
   setInterval(() => { runIrrigationChecks().catch(e => console.error('Scheduled alert run failed:', e.message)); }, 30 * 60 * 1000);
 }
 
-/* ===================== WEATHER ALERTS (daily weather message, rain push + email, hourly water reminder) ===================== */
+/* ===================== WEATHER ALERTS (daily weather push, rain push + heavy-rain email, 4 water reminders) ===================== */
 // Used by weather.html "Notifications" card.
-// Needs: Hasura table "agri_weather_alerts" (columns incl. last_daily_key text), and for emails
+// Needs Hasura tables: agri.weather_alerts (incl. last_daily_key, email_month, email_month_count, email_total, last_email_day)
+// and agri.email_usage (key text primary key, count int). For emails:
 // BREVO_API_KEY + EMAIL_FROM (Render free blocks SMTP) or SMTP_USER + SMTP_PASS (Gmail, paid plans / local PC).
 let _mailer;
 function getMailer() {
@@ -1264,6 +1269,25 @@ async function pushWeather(row, payload) {
   }
 }
 
+/* ---- Email budget: 300 emails for ~100 days. Every email sent is counted in agri.email_usage (key "total").
+   Rain emails stop at 280, so the last 20 are kept for verification codes and password-reset codes.
+   (Needs the default primary-key constraint name email_usage_pkey.) */
+const EMAIL_RAIN_STOP = 280;
+async function emailsUsed() {
+  try {
+    const d = await hasuraGql(`query { agri_email_usage(where:{key:{_eq:"total"}}){ count } }`);
+    return d.agri_email_usage[0] ? d.agri_email_usage[0].count : 0;
+  } catch (e) { console.error('Email counter read failed:', e.message); return 0; }
+}
+async function bumpEmailCount() {
+  try {
+    await hasuraGql(`mutation {
+      insert_agri_email_usage(objects:[{key:"total",count:0}], on_conflict:{constraint:email_usage_pkey, update_columns:[]}){ affected_rows }
+      update_agri_email_usage(where:{key:{_eq:"total"}}, _inc:{count:1}){ affected_rows }
+    }`);
+  } catch (e) { console.error('Email counter update failed:', e.message); }
+}
+
 /* ---- Sending email. Render FREE blocks SMTP ports (25/465/587), so Gmail/nodemailer cannot work there.
    Use an HTTPS mail API instead: set BREVO_API_KEY + EMAIL_FROM (a sender address verified in Brevo) on Render.
    If BREVO_API_KEY is not set, it falls back to Gmail SMTP (works only on paid Render plans / your own PC). */
@@ -1283,11 +1307,13 @@ async function sendMail({ to, subject, text, fromName }) {
       const j = await r.json().catch(() => ({}));
       throw new Error('Email service error: ' + (j.message || r.status));
     }
+    await bumpEmailCount();
     return;
   }
   const mailer = getMailer();
   if (!mailer) throw new Error('Email sending is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).');
   await mailer.sendMail({ from: `"Agrinova Weather" <${process.env.SMTP_USER}>`, to, subject, text });
+  await bumpEmailCount();
 }
 
 /* ---------- Email verification (6-digit code) for weather alerts ---------- */
@@ -1333,7 +1359,8 @@ app.post('/api/weather-alerts/email/send-code', async (req, res) => {
     if (rec.sends.length && now - rec.sends[rec.sends.length - 1] < 30000) {
       return res.status(429).json({ error: { message: 'Please wait 30 seconds before asking for a new code.' } });
     }
-    if (rec.sends.length >= 5) {
+    // 3 codes per hour per email (keeps the 300-email budget safe)
+    if (rec.sends.length >= 3) {
       return res.status(429).json({ error: { message: 'Too many codes requested for this email. Try again in an hour.' } });
     }
 
@@ -1414,7 +1441,6 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
     const prev = await hasuraGql(`query($e:String!){ agri_weather_alerts(where:{endpoint:{_eq:$e}}){ email } }`, { e: subscription.endpoint });
     const before = prev.agri_weather_alerts[0];
     const isNew = !before;
-    const emailChanged = !before || (before.email || '') !== cleanEmail;
 
     const wxRow = { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
                     lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
@@ -1431,24 +1457,11 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
         { o: wxRow });
     }
 
-    // Welcome push only the first time (not on every page load)
+    // Welcome push only the first time (not on every page load). No welcome email (saves the email budget).
     if (isNew) {
       pushWeather({ subscription, endpoint: subscription.endpoint },
-        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and hourly water reminders are now active.' })
+        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and water reminders are now active.' })
         .catch(e => console.error('Welcome push failed:', e.message));
-    }
-
-    // Welcome email when alerts are turned on, or when the email was changed
-    if (cleanEmail && emailChanged && emailConfigured()) {
-      const where = String(place || 'your area').slice(0, 80);
-      fetchDayForecast(Number(lat), Number(lon)).then(f => {
-        const m = dayMessage(f, where);
-        return sendMail({
-          to: cleanEmail,
-          subject: '🔔 Agrinova weather alerts are on',
-          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Hourly water reminders on your phone (6 AM to 8 PM)\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
-        });
-      }).catch(e => console.error('Welcome email failed:', e.message));
     }
 
     res.json({ ok: true });
@@ -1482,13 +1495,16 @@ async function fetchRainForecast(lat, lon) {
   return j.hourly;
 }
 
+// Water reminders go out only at these hours (IST), once each
+const WATER_HOURS = [6, 10, 14, 18];
+
 let wxBusy = false;
 async function runWeatherAlerts() {
   if (wxBusy) return { skipped: true };
   wxBusy = true;
   const stats = { subscribers: 0, daily: 0, rain: 0, water: 0, emails: 0, errors: 0 };
   try {
-    const data = await hasuraGql(`query { agri_weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key } }`);
+    const data = await hasuraGql(`query { agri_weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key email_month email_month_count email_total last_email_day } }`);
     const rows = data.agri_weather_alerts || [];
     stats.subscribers = rows.length;
     const { date, hour } = istNow();
@@ -1497,10 +1513,14 @@ async function runWeatherAlerts() {
 
     for (const row of rows) {
       try {
+        // FIX: Hasura numeric columns can come back as strings, so convert to numbers first
+        row.lat = Number(row.lat); row.lon = Number(row.lon);
+        if (!isFinite(row.lat) || !isFinite(row.lon)) continue;
+
         const set = {};
         const rainKey = `${date}:${Math.floor(hour / 3)}`;
 
-        // Morning weather message (sunny / cloudy / rain / heat): push + email, once per day, 6 AM to 11 AM IST
+        // Morning weather message (sunny / cloudy / rain / heat): PUSH only, once per day, 6 AM to 11 AM IST
         if (row.rain_on && hour >= 6 && hour <= 11 && row.last_daily_key !== date) {
           const dk = 'd|' + row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
           if (!memo.has(dk)) memo.set(dk, fetchDayForecast(row.lat, row.lon));
@@ -1508,15 +1528,11 @@ async function runWeatherAlerts() {
           const ok = await pushWeather(row, { tag: 'wx-daily', title: m.title, body: m.body });
           if (ok) {
             set.last_daily_key = date; stats.daily++;
-            if (m.kind === 'rain' || m.kind === 'storm') { set.last_rain_key = rainKey; row.last_rain_key = rainKey; } // avoid a second rain mail right after
-            if (row.email && emailConfigured()) {
-              sendMail({ to: row.email, subject: m.title, text: `${m.body}\n\nOpen Agrinova Weather for the full forecast.` })
-                .then(() => { stats.emails++; }).catch(e => console.error('Daily email failed:', e.message));
-            }
+            if (m.kind === 'rain' || m.kind === 'storm') { set.last_rain_key = rainKey; row.last_rain_key = rainKey; } // avoid a second rain push right after
           }
         }
 
-        // Rain alert: push + email, once per 3-hour block
+        // Rain alert: PUSH once per 3-hour block. EMAIL only for heavy rain (limited, see caps below)
         if (row.rain_on) {
           const k = row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
           if (!memo.has(k)) memo.set(k, fetchRainForecast(row.lat, row.lon));
@@ -1536,18 +1552,30 @@ async function runWeatherAlerts() {
               const ok = await pushWeather(row, { tag: 'wx-rain', title, body });
               if (ok) {
                 set.last_rain_key = rainKey; stats.rain++;
-                if (row.email && emailConfigured()) {
-                  sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` })
-                    .then(() => { stats.emails++; }).catch(e => console.error('Rain email failed:', e.message));
+
+                // Email: heavy rain only (70%+ chance and 10 mm+), max 1 per day, 3 per month, 10 in total per user,
+                // and only while the global budget is below EMAIL_RAIN_STOP
+                const heavy = maxP >= 70 && mm >= 10;
+                const ym = date.slice(0, 7);
+                const monthCount = row.email_month === ym ? (row.email_month_count || 0) : 0;
+                if (heavy && row.email && emailConfigured()
+                    && row.last_email_day !== date && monthCount < 3 && (row.email_total || 0) < 10
+                    && (await emailsUsed()) < EMAIL_RAIN_STOP) {
+                  try {
+                    await sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` });
+                    stats.emails++;
+                    set.email_month = ym; set.email_month_count = monthCount + 1;
+                    set.email_total = (row.email_total || 0) + 1; set.last_email_day = date;
+                  } catch (e) { console.error('Rain email failed:', e.message); }
                 }
               }
             }
           }
         }
 
-        // Hourly water reminder: push only, 6 AM to 8 PM IST
+        // Water reminder: PUSH only, 4 times a day (6 AM, 10 AM, 2 PM, 6 PM IST)
         const waterKey = `${date}:${hour}`;
-        if (row.water_on && hour >= 6 && hour <= 20 && row.last_water_key !== waterKey) {
+        if (row.water_on && WATER_HOURS.includes(hour) && row.last_water_key !== waterKey) {
           const ok = await pushWeather(row, {
             tag: 'wx-water', title: '💧 Water reminder',
             body: 'Time to check your crop water. Check soil moisture and irrigate if the soil is dry.'
@@ -2266,9 +2294,10 @@ app.get('/api/health', async (req, res) => {
     hasura: false
   };
   try {
-    await hasuraGql(`query { chats_aggregate { aggregate { count } } chat_messages_aggregate { aggregate { count } } }`);
+    await hasuraGql(`query { agri_chats_aggregate { aggregate { count } } agri_chat_messages_aggregate { aggregate { count } } }`);
     out.hasura = true;
   } catch (e) { out.hasuraError = e.message; }
+  try { out.emailsUsed = await emailsUsed(); out.emailLimit = 300; } catch (e) {}
   res.json(out);
 });
 
