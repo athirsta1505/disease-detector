@@ -1,2755 +1,2287 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Fertilizer Management — AgriNova</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&family=Sora:wght@600;700&display=swap" rel="stylesheet">
-<style>
-/* ===================================================
-   AgriNova — Fertilizer Management (app edition)
-   Palette: forest green, leaf green, soil brown,
-   pale sage background. All body text is pure black.
-=================================================== */
-
-:root {
-  --forest: #1F4D36;
-  --forest-deep: #0F2A1D;
-  --leaf: #4CAF6D;
-  --leaf-soft: #E2F2E7;
-  --soil: #6B4423;
-  --soil-soft: #F3EADD;
-  --bg: #F0F4EC;
-  --paper: #FFFFFF;
-  --field: #F5F7F2;
-  --ink: #000000;
-  --ink-soft: #1E1E1E;
-  --line: #D3D9CC;
-  --amber: #B4620F;
-  --amber-soft: #FBEBD8;
-  --danger: #B3261E;
-  --danger-soft: #FDECEC;
-  --low: #B94A2C;
-  --mid: #B4620F;
-  --good: #1F7A48;
-  --radius-sm: 12px;
-  --radius-md: 20px;
-  --shadow: 0 1px 2px rgba(15, 42, 29, 0.07), 0 12px 30px -16px rgba(15, 42, 29, 0.35);
-  --font-head: "Sora", "Segoe UI", sans-serif;
-  --font-body: "Inter", "Segoe UI", sans-serif;
-}
-
-* { box-sizing: border-box; }
-
-html { scroll-behavior: smooth; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-weight: 500;
-  -webkit-font-smoothing: antialiased;
-}
-
-body {
-  min-height: 100vh;
-  padding-bottom: 130px;
-}
-
-a { color: inherit; }
-img, svg { max-width: 100%; }
-
-.ico { display: inline-flex; width: 20px; height: 20px; flex: none; }
-.ico svg { width: 100%; height: 100%; display: block; }
-
-/* ---------- Top bar ---------- */
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 24px;
-  background: var(--forest);
-  color: #F4FBF6;
-  box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.5);
-}
-
-.topbar__brand { display: flex; align-items: center; gap: 10px; min-width: 0; justify-self: start; }
-.topbar__logo { width: 30px; height: 30px; border-radius: 9px; background: var(--leaf); color: var(--forest-deep); display: grid; place-items: center; flex: none; }
-.topbar__logo .ico { width: 18px; height: 18px; }
-.topbar__wordmark { font-family: var(--font-head); font-weight: 700; font-size: 1.08rem; letter-spacing: 0.01em; white-space: nowrap; }
-.topbar__wordmark-agri { color: #FFFFFF; }
-.topbar__wordmark-nova { color: var(--leaf); }
-
-.topbar__title {
-  grid-column: 2;
-  justify-self: center;
-  margin: 0;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 1.32rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  color: #FFFFFF;
-}
-
-.langswitch {
-  grid-column: 3;
-  justify-self: end;
-  display: inline-flex;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  gap: 2px;
-}
-.langswitch button {
-  border: none;
-  background: transparent;
-  color: #FFFFFF;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 0.78rem;
-  padding: 7px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.langswitch button.is-active { background: var(--leaf); color: #04140B; }
-.langswitch button:not(.is-active):hover { background: rgba(255, 255, 255, 0.14); }
-
-/* ---------- Layout ---------- */
-
-.page { max-width: 860px; margin: 0 auto; padding: 22px 20px 0; }
-.sec { scroll-margin-top: 84px; }
-
-.sec__label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 34px 2px 14px;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--ink);
-}
-.sec__label .ico { width: 36px; height: 36px; padding: 8px; border-radius: 12px; background: var(--forest); color: #FFFFFF; }
-
-/* ---------- Hero ---------- */
-
-.hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: 24px;
-  padding: 30px 26px 26px;
-  color: #FFFFFF;
-  background:
-    radial-gradient(420px 220px at 100% 0%, rgba(76, 175, 109, 0.42), transparent 70%),
-    radial-gradient(360px 240px at 0% 100%, rgba(139, 94, 52, 0.35), transparent 70%),
-    linear-gradient(160deg, #1F4D36 0%, #0F2A1D 100%);
-  box-shadow: var(--shadow);
-}
-.hero__eyebrow { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.85rem; color: #CDEBD6; margin-bottom: 10px; }
-.hero__eyebrow .ico { width: 18px; height: 18px; }
-.hero h2 { margin: 0 0 10px; font-family: var(--font-head); font-weight: 700; font-size: 1.9rem; line-height: 1.2; max-width: 520px; }
-.hero p { margin: 0 0 20px; font-size: 0.98rem; line-height: 1.6; color: #E6F4EA; max-width: 520px; }
-.hero__ask { font-weight: 700; font-size: 0.9rem; margin-bottom: 10px; color: #FFFFFF; }
-.hero__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.hero__chips button {
-  border: 1.5px solid rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.08);
-  color: #FFFFFF;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 0.9rem;
-  padding: 9px 16px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.hero__chips button:hover { background: #FFFFFF; color: var(--forest-deep); }
-
-/* ---------- Cards ---------- */
-
-section.card {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 24px;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow);
-}
-
-.card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.card__head h2 { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0; }
-.card__hint { font-size: 0.82rem; color: var(--ink-soft); font-weight: 600; }
-
-/* ---------- Form ---------- */
-
-.form-top { display: grid; grid-template-columns: 1.2fr 1.2fr 0.8fr; gap: 16px; }
-.field { display: flex; flex-direction: column; gap: 8px; }
-.field label, .field-label { font-size: 0.85rem; font-weight: 700; color: var(--ink); margin: 0; }
-
-.select-wrap { position: relative; }
-.select-wrap::after {
-  content: "";
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--ink);
-  border-bottom: 2px solid var(--ink);
-  transform: translateY(-70%) rotate(45deg);
-  pointer-events: none;
-}
-
-select, .input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--field);
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 12px 34px 12px 13px;
-  cursor: pointer;
-}
-.input { padding-right: 13px; cursor: text; }
-select option { color: #000; background: #fff; }
-select:hover, .input:hover { border-color: var(--leaf); }
-select:focus-visible, .input:focus-visible, textarea:focus-visible {
-  outline: none;
-  border-color: var(--forest);
-  box-shadow: 0 0 0 3px var(--leaf-soft);
-}
-::placeholder { color: #444; opacity: 1; }
-
-.nutrient-block { margin-top: 22px; }
-.npk-rows { margin-top: 6px; }
-.npk-item { display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); }
-.npk-item:first-child { border-top: none; }
-.npk-item__name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.92rem; }
-.npk-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.npk-dot--n { background: #2F73C4; }
-.npk-dot--p { background: var(--amber); }
-.npk-dot--k { background: #8347C7; }
-
-.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--field); padding: 4px; border-radius: 13px; border: 1.5px solid var(--line); }
-.seg__btn { border: none; background: transparent; border-radius: 9px; padding: 11px 6px; font-family: var(--font-body); font-weight: 700; font-size: 0.88rem; color: var(--ink); cursor: pointer; }
-.seg__btn:hover { background: #E8EEE3; }
-.seg__btn.is-active { color: #FFFFFF; }
-.seg__btn--low.is-active { background: var(--low); }
-.seg__btn--medium.is-active { background: var(--mid); }
-.seg__btn--high.is-active { background: var(--good); }
-
-.btn-primary {
-  margin-top: 20px;
-  width: 100%;
-  border: none;
-  background: linear-gradient(180deg, #27603F, var(--forest));
-  color: #FFFFFF;
-  font-family: var(--font-head);
-  font-weight: 700;
-  font-size: 1rem;
-  padding: 15px 20px;
-  border-radius: 14px;
-  cursor: pointer;
-  box-shadow: 0 10px 20px -12px rgba(15, 42, 29, 0.9);
-}
-.btn-primary:hover { background: var(--forest-deep); }
-.btn-primary:active { transform: translateY(1px); }
-.btn-primary--small { margin-top: 0; width: auto; padding: 11px 20px; font-size: 0.88rem; }
-
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1.5px solid var(--forest);
-  background: transparent;
-  color: var(--forest-deep);
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 0.88rem;
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.btn-secondary:hover { background: var(--forest); color: #FFFFFF; }
-.btn-secondary .ico { width: 17px; height: 17px; }
-.btn-whatsapp { background: #1E8E4E; border-color: #1E8E4E; color: #FFFFFF; }
-.btn-whatsapp:hover { background: #157040; border-color: #157040; }
-
-/* ---------- Result ---------- */
-
-.result__placeholder { color: var(--ink); font-size: 0.95rem; padding: 4px 2px; margin: 0; }
-.result { display: none; }
-.result.is-visible { display: block; animation: rise 0.28s ease; }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-
-.result__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.result__kicker { margin: 0 0 4px; font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); }
-.result__name { margin: 0; font-family: var(--font-head); font-size: 1.35rem; font-weight: 700; color: var(--ink); }
-.result__chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip { display: inline-block; font-size: 0.8rem; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: var(--leaf-soft); color: var(--ink); border: 1px solid #B9DEC5; }
-
-.result__banner { margin: 16px 0 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--amber-soft); border: 1px solid #EBC79D; font-size: 0.9rem; line-height: 1.55; font-weight: 600; }
-
-.result__sec {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 28px 0 12px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-  font-family: var(--font-head);
-  font-size: 1.02rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-.result__sec .ico { width: 30px; height: 30px; padding: 6px; border-radius: 10px; background: var(--leaf-soft); color: var(--forest); }
-.result__head + .result__sec, .result__banner + .result__sec { margin-top: 22px; }
-
-.qty { border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; }
-.qty-row { display: grid; grid-template-columns: 1.8fr 1fr 0.7fr; gap: 10px; align-items: center; padding: 13px 14px; border-top: 1px solid var(--line); }
-.qty-row--head { background: var(--forest); color: #FFFFFF; font-size: 0.8rem; font-weight: 700; border-top: none; padding: 10px 14px; }
-.qty-row__name { font-family: var(--font-head); font-weight: 700; font-size: 1rem; color: var(--ink); }
-.qty-row__role { font-family: var(--font-body); font-weight: 500; font-size: 0.82rem; color: var(--ink-soft); margin-top: 2px; }
-.qty-row__kg { font-family: var(--font-head); font-weight: 700; font-size: 1.08rem; }
-.qty-row__bags { font-weight: 700; font-size: 0.95rem; }
-.status { display: inline-block; font-family: var(--font-body); font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #FFFFFF; margin-left: 6px; vertical-align: middle; }
-.status--low { background: var(--low); }
-.status--medium { background: var(--mid); }
-.status--high { background: var(--good); }
-.result__note { margin: 10px 2px 0; font-size: 0.85rem; line-height: 1.5; color: var(--ink-soft); font-weight: 500; }
-
-.plan { list-style: none; margin: 0; padding: 0; }
-.plan__step { position: relative; display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding-bottom: 20px; }
-.plan__step:last-child { padding-bottom: 0; }
-.plan__step::before { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
-.plan__step:last-child::before { display: none; }
-.plan__dot { width: 34px; height: 34px; border-radius: 50%; background: var(--forest); color: #FFFFFF; font-family: var(--font-head); font-weight: 700; font-size: 0.9rem; display: grid; place-items: center; }
-.plan__title { font-family: var(--font-head); font-weight: 700; font-size: 0.98rem; color: var(--ink); margin-bottom: 8px; padding-top: 5px; }
-.plan__items { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.pill { font-size: 0.84rem; font-weight: 600; padding: 6px 12px; border-radius: 10px; background: var(--field); border: 1.5px solid var(--line); color: var(--ink); }
-.pill b { font-weight: 700; margin-right: 6px; }
-.plan__detail { margin: 0; font-size: 0.88rem; line-height: 1.55; color: var(--ink-soft); font-weight: 500; }
-
-.mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.mini { background: var(--soil-soft); border-radius: 14px; padding: 14px; }
-.mini h5 { margin: 0 0 6px; font-family: var(--font-head); font-size: 0.92rem; font-weight: 700; color: var(--ink); }
-.mini p { margin: 0; font-size: 0.86rem; line-height: 1.55; color: var(--ink); font-weight: 500; }
-.mini__big { display: block; font-family: var(--font-head); font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
-
-.text-block { margin: 0; font-size: 0.92rem; line-height: 1.65; color: var(--ink); font-weight: 500; }
-
-.check-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.check-list li { display: flex; gap: 10px; font-size: 0.9rem; line-height: 1.55; color: var(--ink); font-weight: 500; }
-.check-list li::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; background: var(--leaf-soft); border: 2px solid var(--leaf); }
-.check-list--alt li::before { border-color: var(--soil); background: var(--soil-soft); }
-
-.caution { display: flex; gap: 12px; padding: 14px; border-radius: var(--radius-sm); background: var(--danger-soft); border: 1px solid #F0B4B0; }
-.caution .ico { color: var(--danger); margin-top: 1px; }
-.caution p { margin: 0; font-size: 0.92rem; line-height: 1.6; font-weight: 600; color: var(--ink); }
-
-.result__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
-
-/* ---------- AI insight ---------- */
-
-.ai-insight {
-  margin-top: 22px;
-  padding: 16px 18px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(160deg, #EAF6EE, #F5F7F2);
-  border: 1.5px solid #BEE3C8;
-}
-.ai-insight__head { display: flex; align-items: center; gap: 8px; font-family: var(--font-head); font-weight: 700; font-size: 0.95rem; color: var(--forest-deep); margin-bottom: 8px; }
-.ai-insight__head .ico { width: 20px; height: 20px; }
-.ai-insight__body { font-size: 0.9rem; line-height: 1.6; color: var(--ink); font-weight: 500; }
-.ai-insight__row { display: flex; gap: 8px; padding: 4px 0; }
-.ai-insight__row dt { flex: none; width: 100px; font-weight: 700; color: var(--forest); }
-.ai-insight__row dd { margin: 0; }
-.ai-insight__loading { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 0.88rem; font-weight: 600; }
-.ai-spinner {
-  width: 14px; height: 14px; border: 2px solid rgba(31,77,54,0.25); border-top-color: var(--forest);
-  border-radius: 50%; animation: aispin 0.7s linear infinite; flex: none;
-}
-@keyframes aispin { to { transform: rotate(360deg); } }
-.ai-insight__error { color: var(--danger); font-size: 0.88rem; font-weight: 600; }
-
-/* ---------- Soil nutrient analysis ---------- */
-
-.fert-index { display: flex; align-items: center; gap: 18px; padding: 16px; border-radius: 16px; background: var(--field); border: 1.5px solid var(--line); margin-bottom: 20px; }
-.fert-index__score { font-family: var(--font-head); font-weight: 700; font-size: 2.2rem; line-height: 1; color: var(--ink); }
-.fert-index__score small { font-size: 0.9rem; font-weight: 600; margin-left: 2px; }
-.fert-index__meta { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; }
-.fert-index__meta b { font-weight: 700; }
-.fert-index__meta span { font-weight: 700; }
-.fert-index__bar { height: 10px; border-radius: 999px; background: #DCE3D5; overflow: hidden; margin-top: 4px; }
-.fert-index__bar i { display: block; height: 100%; border-radius: 999px; }
-.fert-index--low .fert-index__bar i { background: var(--low); }
-.fert-index--mid .fert-index__bar i { background: var(--mid); }
-.fert-index--good .fert-index__bar i { background: var(--good); }
-.fert-index--low .fert-index__meta span { color: var(--low); }
-.fert-index--mid .fert-index__meta span { color: var(--mid); }
-.fert-index--good .fert-index__meta span { color: var(--good); }
-
-.nutri-bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.nutri-bar { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.nutri-bar__track { width: 100%; max-width: 64px; height: 140px; border-radius: 10px; background: var(--field); border: 1.5px solid var(--line); display: flex; align-items: flex-end; overflow: hidden; }
-.nutri-bar__fill { width: 100%; border-radius: 6px 6px 0 0; transition: height 0.3s ease; }
-.nutri-bar__label { font-size: 0.86rem; font-weight: 700; color: var(--ink); text-align: center; }
-.nutri-bar__status { font-size: 0.82rem; font-weight: 600; color: var(--ink); text-align: center; }
-
-.insights { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.insights li { display: flex; gap: 10px; font-size: 0.9rem; line-height: 1.55; color: var(--ink); font-weight: 500; background: var(--field); border-radius: var(--radius-sm); padding: 11px 13px; }
-.insights .npk-dot { margin-top: 6px; }
-
-/* ---------- Library ---------- */
-
-.tabbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.tabbar button { border: 1.5px solid var(--line); background: var(--field); color: var(--ink); font-family: var(--font-body); font-weight: 700; font-size: 0.85rem; padding: 9px 16px; border-radius: 999px; cursor: pointer; }
-.tabbar button.is-active { background: var(--forest); border-color: var(--forest); color: #FFFFFF; }
-.tabbar button:not(.is-active):hover { border-color: var(--leaf); }
-
-.ftype-list { display: flex; flex-direction: column; gap: 10px; }
-.ftype { border: 1.5px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--field); }
-.ftype__head { width: 100%; display: flex; align-items: center; gap: 12px; background: none; border: none; padding: 13px 14px; cursor: pointer; text-align: left; font-family: var(--font-body); }
-.ftype__badge { flex: none; width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-family: var(--font-head); font-weight: 700; font-size: 0.74rem; color: #FFFFFF; }
-.ftype__name { font-weight: 700; font-size: 0.98rem; color: var(--ink); flex: 1; }
-.ftype__chevron { width: 9px; height: 9px; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); transition: transform 0.18s ease; flex: none; margin-right: 4px; }
-.ftype.is-open .ftype__chevron { transform: rotate(-135deg); }
-.ftype__body { max-height: 0; overflow: hidden; transition: max-height 0.22s ease; }
-.ftype.is-open .ftype__body { max-height: 340px; }
-.ftype__body-inner { padding: 0 14px 16px 68px; font-size: 0.9rem; line-height: 1.6; color: var(--ink); font-weight: 500; }
-
-/* ---------- Schedule / lists ---------- */
-
-.schedule-list { display: flex; flex-direction: column; }
-.schedule-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 13px 0; border-top: 1px solid var(--line); }
-.schedule-row:first-child { border-top: none; }
-.schedule-row__stage { font-family: var(--font-head); font-weight: 700; font-size: 0.88rem; color: var(--ink); }
-.schedule-row__detail { font-size: 0.9rem; line-height: 1.55; color: var(--ink); }
-
-.tick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.tick-list li { display: flex; gap: 10px; font-size: 0.9rem; line-height: 1.55; color: var(--ink); }
-.tick-list li::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; background: var(--leaf-soft); border: 2px solid var(--leaf); }
-
-.warning-banner { background: var(--danger-soft); border: 1px solid #F0B4B0; color: var(--ink); font-weight: 600; border-radius: var(--radius-sm); padding: 12px 14px; font-size: 0.9rem; line-height: 1.55; margin-bottom: 14px; }
-.warning-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.warning-list li { font-size: 0.9rem; line-height: 1.55; color: var(--ink); background: var(--soil-soft); border-radius: var(--radius-sm); padding: 11px 13px; }
-
-/* ---------- History / effect / reminder ---------- */
-
-.history-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; margin-bottom: 18px; }
-.history-form--narrow { grid-template-columns: 1fr 1fr; }
-.history-form input[type="date"], .history-form input[type="text"] {
-  width: 100%;
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--field);
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 11px 12px;
-}
-.history-form input:focus-visible { outline: none; border-color: var(--forest); box-shadow: 0 0 0 3px var(--leaf-soft); }
-.history-empty { color: var(--ink); font-size: 0.92rem; padding: 4px 2px; }
-.history-list { display: flex; flex-direction: column; gap: 10px; }
-.history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--field); border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 11px 14px; font-size: 0.9rem; }
-.history-row__main { color: var(--ink); line-height: 1.55; }
-.history-row__main b { font-weight: 700; }
-.history-row__effect { color: var(--soil); font-weight: 600; font-size: 0.84rem; margin-top: 2px; }
-.history-row__del { flex: none; border: none; background: none; color: var(--ink); cursor: pointer; font-size: 1.3rem; line-height: 1; padding: 4px 8px; }
-.history-row__del:hover { color: var(--danger); }
-
-.effect-panel { display: flex; flex-direction: column; gap: 12px; }
-.effect-panel__entry { font-size: 0.92rem; color: var(--ink); margin: 0; }
-.star-rating { display: flex; gap: 6px; }
-.star-rating button { border: none; background: none; font-size: 1.6rem; line-height: 1; cursor: pointer; color: #C9CFC1; padding: 0; }
-.star-rating button.is-filled { color: var(--amber); }
-.effect-notes { width: 100%; font-family: var(--font-body); font-size: 0.9rem; font-weight: 500; color: var(--ink); background: var(--field); border: 1.5px solid var(--line); border-radius: var(--radius-sm); padding: 11px 12px; resize: vertical; }
-
-.reminder-banner { background: var(--leaf-soft); border: 1px solid #B9DEC5; color: var(--ink); font-weight: 600; border-radius: var(--radius-sm); padding: 12px 14px; font-size: 0.9rem; margin-bottom: 14px; }
-.reminder-banner.is-due { background: var(--danger-soft); border-color: #F0B4B0; }
-
-.knowledge-tip { font-size: 0.98rem; line-height: 1.65; color: var(--ink); font-weight: 500; background: var(--soil-soft); border-radius: var(--radius-sm); padding: 16px 18px; margin: 0 0 14px; }
-
-/* ---------- Guide + safety ---------- */
-
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-.two-col > section.card { margin-bottom: 0; }
-.stepped { list-style: none; margin: 0; padding: 0; counter-reset: step; display: flex; flex-direction: column; gap: 12px; }
-.stepped li { counter-increment: step; display: flex; gap: 12px; font-size: 0.9rem; line-height: 1.55; color: var(--ink); }
-.stepped li::before { content: counter(step); flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--forest); color: #FFFFFF; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
-.safety-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.safety-list li { display: flex; gap: 10px; font-size: 0.9rem; line-height: 1.55; color: var(--ink); background: var(--amber-soft); border-radius: var(--radius-sm); padding: 11px 13px; }
-.safety-list li .ico { width: 18px; height: 18px; margin-top: 2px; color: var(--amber); }
-
-.foot-note { text-align: center; color: var(--ink); font-size: 0.82rem; font-weight: 500; padding: 26px 20px 0; }
-
-/* ---------- Multi-select (Usage history fertilizer field) ---------- */
-
-.multiselect { position: relative; }
-.multiselect__btn {
-  width: 100%;
-  text-align: left;
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--field);
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 11px 34px 11px 12px;
-  cursor: pointer;
-  position: relative;
-  min-height: 42px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.multiselect__btn::after {
-  content: "";
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--ink);
-  border-bottom: 2px solid var(--ink);
-  transform: translateY(-70%) rotate(45deg);
-  pointer-events: none;
-}
-.multiselect__btn:hover, .multiselect__btn.is-open { border-color: var(--forest); }
-.multiselect__btn .ph { color: #666; font-weight: 500; }
-.multiselect__panel {
-  display: none;
-  position: absolute;
-  z-index: 25;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  max-height: 240px;
-  overflow-y: auto;
-  background: #FFFFFF;
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-  padding: 6px;
-}
-.multiselect__panel.is-open { display: block; }
-.multiselect__item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-}
-.multiselect__item:hover { background: var(--field); }
-.multiselect__item input { width: 16px; height: 16px; accent-color: var(--forest); flex: none; }
-.multiselect__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.multiselect__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 5px 6px 5px 10px;
-  border-radius: 999px;
-  background: var(--leaf-soft);
-  border: 1px solid #B9DEC5;
-  color: var(--ink);
-}
-.multiselect__chip button {
-  border: none;
-  background: rgba(0,0,0,0.08);
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-/* ---------- Bottom navigation ---------- */
-
-.bottomnav {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
-  display: flex;
-  gap: 4px;
-  padding: 6px;
-  width: min(520px, calc(100% - 20px));
-  background: rgba(15, 42, 29, 0.97);
-  border-radius: 24px;
-  box-shadow: 0 16px 34px -10px rgba(0, 0, 0, 0.55);
-}
-.bottomnav a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px; border-radius: 18px; color: #DDEEE3; text-decoration: none; font-size: 0.72rem; font-weight: 700; }
-.bottomnav a .ico { width: 21px; height: 21px; }
-.bottomnav a.is-active { background: var(--leaf); color: #04140B; }
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 700px) {
-  .form-top { grid-template-columns: 1fr; }
-  .npk-item { grid-template-columns: 1fr; gap: 8px; }
-  .two-col { grid-template-columns: 1fr; }
-  .mini-grid { grid-template-columns: 1fr; }
-  .schedule-row { grid-template-columns: 1fr; gap: 4px; }
-  .history-form { grid-template-columns: 1fr 1fr; }
-  .history-form--narrow { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 620px) {
-  .topbar { padding: 12px 14px; gap: 10px; grid-template-columns: auto 1fr auto; }
-  .topbar__wordmark { display: none; }
-  .topbar__title { grid-column: 2; font-size: 1.02rem; }
-  .langswitch button { padding: 6px 9px; font-size: 0.72rem; }
-  .page { padding: 16px 14px 0; }
-  .hero { padding: 24px 20px 22px; }
-  .hero h2 { font-size: 1.5rem; }
-  section.card { padding: 20px 18px; }
-  .qty-row { grid-template-columns: 1.6fr 1fr 0.6fr; gap: 6px; padding: 12px 10px; }
-  .nutri-bars { gap: 8px; }
-  .ftype__body-inner { padding-left: 14px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .result.is-visible { animation: none; }
-  .ftype__body { transition: none; }
-}
-
-@media print {
-  body.printing-result * { visibility: hidden; }
-  body.printing-result #resultCard, body.printing-result #resultCard * { visibility: visible; }
-  body.printing-result #resultCard { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; }
-  body.printing-result .result__actions { display: none; }
-}
-:root { --forest: #4CAF6D; --forest-deep: #3E9A5C; }
-
-.hero {
-  background:
-    radial-gradient(420px 220px at 100% 0%, rgba(255,255,255,0.25), transparent 70%),
-    radial-gradient(360px 240px at 0% 100%, rgba(139,94,52,0.25), transparent 70%),
-    linear-gradient(160deg, #4CAF6D 0%, #3E9A5C 100%);
-}
-.btn-primary {
-  background: linear-gradient(180deg, #5BBD7B, var(--forest));
-  box-shadow: 0 10px 20px -12px rgba(62,154,92,0.8);
-}
-.topbar__logo { background: #FFFFFF; color: var(--forest-deep); }
-.topbar__wordmark-nova { color: #FFFFFF; }
-.langswitch button.is-active { background: #FFFFFF; color: var(--forest-deep); }
-
-.bottomnav { background: rgba(76,175,109,0.97); }
-.bottomnav a { color: #FFFFFF; }
-.bottomnav a.is-active { background: #FFFFFF; color: var(--forest-deep); }
-/* ===== Header exactly like the AgriNova screenshot ===== */
-.topbar {
-  position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px;
-  padding: 16px 28px;
-  padding-top: calc(16px + env(safe-area-inset-top, 0px));
-  background: #2E7D32;
-  color: #fff;
-  box-shadow: none;
-  font-family: "Poppins", "Segoe UI", sans-serif;
-}
-.topbar__brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.topbar__logo { width: 28px; height: 28px; background: transparent; color: #CCFF90; border-radius: 0; display: grid; place-items: center; }
-.topbar__logo .ico { width: 28px; height: 28px; }
-.topbar__text { display: flex; flex-direction: column; line-height: 1.1; }
-.topbar__wordmark { display: block !important; font-family: "Poppins", sans-serif; font-weight: 700; font-size: 1.6rem; letter-spacing: 0; }
-.topbar__wordmark-agri { color: #FFFFFF; }
-.topbar__wordmark-nova { color: #CCFF90; }
-.topbar__tagline { margin-top: 3px; font-family: "Poppins", sans-serif; font-weight: 700; font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
-
-.topbar__right { display: flex; align-items: center; gap: 10px; }
-.langswitch { display: flex; gap: 10px; padding: 0; background: transparent; border-radius: 0; }
-.langswitch button {
-  border: 1.5px solid rgba(255,255,255,0.85);
-  background: transparent; color: #fff;
-  font-family: "Poppins", "Segoe UI", sans-serif; font-weight: 600; font-size: 0.95rem;
-  padding: 7px 18px; border-radius: 999px; cursor: pointer;
-}
-.langswitch button:not(.is-active):hover { background: rgba(255,255,255,0.15); }
-.langswitch button.is-active { background: #43A047; color: #fff; border-color: rgba(255,255,255,0.85); }
-
-.topbar__back {
-  width: 44px; height: 44px; flex: none;
-  border: none; border-radius: 50%;
-  background: #E8F5E9; color: #1B3A1F;
-  display: grid; place-items: center; cursor: pointer;
-  box-shadow: 0 4px 12px -4px rgba(0,0,0,0.35);
-}
-.topbar__back:hover { background: #fff; }
-.topbar__back svg { width: 22px; height: 22px; }
-
-@media (max-width: 620px) {
-  .topbar { padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
-  .topbar__wordmark { font-size: 1.2rem; }
-  .topbar__tagline { font-size: 0.44rem; }
-  .langswitch { gap: 6px; }
-  .langswitch button { font-size: 0.78rem; padding: 6px 11px; }
-  .topbar__back { width: 38px; height: 38px; }
-}
-/* ===== Header green accents + farm.jpg background ===== */
-:root {
-  --forest: #2E7D32;
-  --forest-deep: #1B5E20;
-  --leaf: #2E7D32;
-  --leaf-soft: #FFFFFF;
-}
-
-/* Hero, main button, bottom menu = header green */
-.hero {
-  background:
-    radial-gradient(420px 220px at 100% 0%, rgba(255,255,255,0.18), transparent 70%),
-    linear-gradient(160deg, #2E7D32 0%, #1B5E20 100%);
-}
-.btn-primary {
-  background: linear-gradient(180deg, #388E3C, #2E7D32);
-  box-shadow: 0 10px 20px -12px rgba(27,94,32,0.9);
-}
-.btn-primary:hover { background: #1B5E20; }
-.bottomnav { background: rgba(46,125,50,0.97); }
-.bottomnav a { color: #FFFFFF; }
-.bottomnav a.is-active { background: #FFFFFF; color: #1B5E20; }
-
-/* Light green boxes -> white box with header-green border */
-.chip,
-.multiselect__chip,
-.reminder-banner,
-.ai-insight {
-  background: #FFFFFF;
-  border: 1.5px solid #2E7D32;
-}
-.reminder-banner.is-due { background: var(--danger-soft); border-color: #F0B4B0; }
-.check-list li::before,
-.tick-list li::before { background: #FFFFFF; border-color: #2E7D32; }
-.result__sec .ico { background: #2E7D32; color: #FFFFFF; }
-select:focus-visible, .input:focus-visible, textarea:focus-visible,
-.history-form input:focus-visible { box-shadow: 0 0 0 3px rgba(46,125,50,0.25); }
-
-
-/* ===== farm.jpg background (HTML img, sharp, full screen) ===== */
-/* ===== farm.jpg background ===== */
-html { background: #F4F4F4 !important; }
-body { background: transparent !important; }
-.bg-photo {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-  object-position: center;
-  z-index: -1;
-  pointer-events: none;
-}
-/* Section titles + footer readable on the photo */
-.sec__label {
-  display: inline-flex;
-  background: rgba(255,255,255,0.93);
-  padding: 8px 18px 8px 8px;
-  border-radius: 999px;
-}
-.foot-note {
-  background: rgba(255,255,255,0.93);
-  border-radius: 14px;
-  margin: 26px 20px 0;
-  padding: 14px 16px;
-}
-/* ===== Center title in header ===== */
-.topbar__title {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0;
-  font-family: "Poppins", "Segoe UI", sans-serif;
-  font-weight: 700;
-  font-size: 1.5rem;
-  color: #FFFFFF;
-  white-space: nowrap;
-  pointer-events: none;
-}
-html[lang="ta"] .t-en { display: none; }
-html:not([lang="ta"]) .t-ta { display: none; }
-@media (max-width: 760px) { .topbar__title { display: none; } }
-/* ===== Header keezhe gap ===== */
-.page { padding-top: 40px !important; }
-.hero { margin-top: 0; } 
-
-</style>
-</head>
-<body>
-<img class="bg-photo" src="farm.jpg" alt="" aria-hidden="true"
- onerror="var f=['images/farm.jpg','assets/farm.jpg','img/farm.jpg','../farm.jpg','../images/farm.jpg','Farm.jpg','farm.jpeg','farm.png'];var i=+(this.dataset.i||0);if(i<f.length){this.dataset.i=i+1;this.src=f[i];}">
-
-<header class="topbar">
-  <div class="topbar__brand">
-    <span class="topbar__logo"><span class="ico" data-icon="sprout"></span></span>
-    <div class="topbar__text">
-      <span class="topbar__wordmark"><span class="topbar__wordmark-agri">Agri</span><span class="topbar__wordmark-nova">Nova</span></span>
-      <span class="topbar__tagline">Smart Agriculture Management System</span>
-    </div>
-  </div>
-
-  <h1 class="topbar__title"><span class="t-en">Fertilizer</span><span class="t-ta">உரம்</span></h1>
-
-  <div class="topbar__right">
-    <nav class="langswitch" aria-label="Language">
-      <button type="button" data-lang="ta">தமிழ்</button>
-      <button type="button" data-lang="en">English</button>
-    </nav>
-    <a href="dashboard.html" class="topbar__back" aria-label="Back to dashboard">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-    </a>
-  </div>
-</header>
-</header>
-
-<main class="page">
-
-  <!-- Hero -->
-  <section class="hero" aria-labelledby="heroTitle">
-    <span class="hero__eyebrow"><span class="ico" data-icon="leaf"></span><span data-i18n="heroEyebrow">Smart farming assistant</span></span>
-    <h2 id="heroTitle" data-i18n="heroTitle">Right fertilizer. Right dose. Right time.</h2>
-    <p data-i18n="heroSub">Get a complete crop-wise fertilizer plan for your field.</p>
-  </section>
-  <!-- 1. Smart recommendation -->
-  <div class="sec" id="sec-recommend">
-    <p class="sec__label"><span class="ico" data-icon="sprout"></span><span data-i18n="grpSmart">Smart recommendation</span></p>
-
-    <section class="card" id="formCard" aria-labelledby="formTitle">
-      <div class="card__head">
-        <h2 id="formTitle" data-i18n="formTitle">Field details</h2>
-        <span class="card__hint" data-i18n="formHint">All fields required</span>
-      </div>
-
-      <form id="recommendForm">
-        <div class="form-top">
-          <div class="field">
-            <label for="cropSelect" data-i18n="cropLabel">Select crop</label>
-            <div class="select-wrap"><select id="cropSelect" required></select></div>
-          </div>
-          <div class="field">
-            <label for="soilSelect" data-i18n="soilLabel">Select soil type</label>
-            <div class="select-wrap"><select id="soilSelect" required></select></div>
-          </div>
-          <div class="field">
-            <label for="areaInput" data-i18n="areaLabel">Land area (acres)</label>
-            <input type="number" id="areaInput" class="input" min="0.25" max="1000" step="0.25" value="1" inputmode="decimal" required />
-          </div>
-        </div>
-
-        <div class="nutrient-block">
-          <p class="field-label" data-i18n="nutrientLabel">Soil nutrient status</p>
-          <div class="npk-rows" id="npkRows"></div>
-        </div>
-
-        <button type="submit" class="btn-primary" data-i18n="btn">Get my fertilizer plan</button>
-      </form>
-    </section>
-
-    <section class="card" id="resultCard" aria-labelledby="resultTitle" aria-live="polite">
-      <div class="card__head">
-        <h2 id="resultTitle" data-i18n="resultTitle">Your fertilizer plan</h2>
-      </div>
-      <p id="resultPlaceholder" class="result__placeholder" data-i18n="resultPlaceholder">Your plan will appear here.</p>
-      <div class="result" id="resultBody"></div>
-    </section>
-
-    <section class="card" aria-labelledby="nutriTitle">
-      <div class="card__head">
-        <h2 id="nutriTitle" data-i18n="nutriTitle">Soil nutrient analysis</h2>
-      </div>
-      <p id="nutriPlaceholder" class="result__placeholder" data-i18n="nutriPlaceholder">Submit your field details to see your soil analysis.</p>
-      <div id="nutriBody"></div>
-    </section>
-  </div>
-</section>
-  <!-- 2. Fertilizer library -->
-  <div class="sec" id="sec-library">
-    <p class="sec__label"><span class="ico" data-icon="flask"></span><span data-i18n="grpLibrary">Fertilizer library</span></p>
-    <section class="card" aria-labelledby="libraryTitle">
-      <div class="card__head">
-        <h2 id="libraryTitle" data-i18n="libraryTitle">Browse by type</h2>
-        <span class="card__hint" data-i18n="typesHint">Tap to expand</span>
-      </div>
-      <div class="tabbar" id="libraryTabs" role="tablist"></div>
-      <div class="ftype-list" id="ftypeList"></div>
-    </section>
-  </div>
-
-  <!-- 3. Schedule, irrigation, warnings -->
-  <div class="sec" id="sec-schedule">
-    <p class="sec__label"><span class="ico" data-icon="calendar"></span><span data-i18n="grpSchedule">Schedule, irrigation &amp; warnings</span></p>
-
-    <section class="card" aria-labelledby="scheduleTitle">
-      <div class="card__head">
-        <h2 id="scheduleTitle" data-i18n="scheduleTitle">Fertilizer schedule</h2>
-      </div>
-      <div class="field" style="margin-bottom:16px">
-        <label for="scheduleCropSelect" data-i18n="cropLabel">Select crop</label>
-        <div class="select-wrap"><select id="scheduleCropSelect"></select></div>
-      </div>
-      <div class="schedule-list" id="scheduleList"></div>
-    </section>
-
-    <section class="card" aria-labelledby="irrigationTitle">
-      <div class="card__head">
-        <h2 id="irrigationTitle" data-i18n="irrigationTitle">Fertilizer + irrigation</h2>
-      </div>
-      <ul class="tick-list" id="irrigationList"></ul>
-    </section>
-
-    <section class="card" aria-labelledby="warningTitle">
-      <div class="card__head">
-        <h2 id="warningTitle" data-i18n="warningTitle">Warning signs to watch</h2>
-      </div>
-      <div id="warningBanner" class="warning-banner" style="display:none"></div>
-      <ul class="warning-list" id="warningList"></ul>
-    </section>
-  </div>
-
-  <!-- 4. History, effect tracking, reminder -->
-  <div class="sec" id="sec-track">
-    <p class="sec__label"><span class="ico" data-icon="clipboard"></span><span data-i18n="grpHistory">History, tracking &amp; reminders</span></p>
-
-    <section class="card" aria-labelledby="historyTitle">
-      <div class="card__head">
-        <h2 id="historyTitle" data-i18n="historyTitle">Usage history</h2>
-        <span class="card__hint" data-i18n="historyHint">Your saved log</span>
-      </div>
-
-      <form id="historyForm" class="history-form">
-        <div class="field">
-          <label for="logDate" data-i18n="logDateLabel">Date</label>
-          <input type="date" id="logDate" required />
-        </div>
-        <div class="field">
-          <label for="logCrop" data-i18n="cropLabel">Select crop</label>
-          <div class="select-wrap"><select id="logCrop" required></select></div>
-        </div>
-        <div class="field">
-          <label for="logFertilizerBtn" data-i18n="rowFertilizer">Fertilizer</label>
-          <div class="multiselect" id="logFertilizerMulti">
-            <button type="button" class="multiselect__btn" id="logFertilizerBtn" aria-haspopup="listbox" aria-expanded="false"></button>
-            <div class="multiselect__panel" id="logFertilizerPanel" role="listbox" aria-multiselectable="true"></div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="logQty" data-i18n="logQtyLabel">Quantity</label>
-          <input type="text" id="logQty" placeholder="e.g. 25kg/acre" required />
-        </div>
-        <button type="submit" class="btn-primary btn-primary--small" data-i18n="logAddBtn">Add entry</button>
-      </form>
-
-      <div class="history-empty" id="historyEmpty" data-i18n="historyEmpty">No entries yet.</div>
-      <div class="history-list" id="historyList"></div>
-    </section>
-
-    <section class="card" aria-labelledby="effectTitle">
-      <div class="card__head">
-        <h2 id="effectTitle" data-i18n="effectTitle">Effect tracking</h2>
-        <span class="card__hint" data-i18n="effectHint">Rate your latest entry</span>
-      </div>
-      <div id="effectEmpty" class="history-empty" data-i18n="effectEmpty">Add a usage entry first.</div>
-      <div id="effectPanel" class="effect-panel" style="display:none">
-        <p class="effect-panel__entry" id="effectEntryLabel"></p>
-        <div class="star-rating" id="starRating"></div>
-        <textarea id="effectNotes" class="effect-notes" rows="2" data-i18n-ph="effectNotesPh" placeholder="Notes on crop response..."></textarea>
-        <div><button type="button" id="saveEffectBtn" class="btn-primary btn-primary--small" data-i18n="effectSaveBtn">Save effect</button></div>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="reminderTitle">
-      <div class="card__head">
-        <h2 id="reminderTitle" data-i18n="reminderTitle">Set a reminder</h2>
-      </div>
-      <div id="reminderBanner" class="reminder-banner" style="display:none"></div>
-      <form id="reminderForm" class="history-form history-form--narrow">
-        <div class="field">
-          <label for="reminderDate" data-i18n="reminderDateLabel">Next application date</label>
-          <input type="date" id="reminderDate" required />
-        </div>
-        <div class="field">
-          <label for="reminderNote" data-i18n="reminderNoteLabel">Note</label>
-          <input type="text" id="reminderNote" placeholder="e.g. Top dressing for rice" />
-        </div>
-        <button type="submit" class="btn-primary btn-primary--small" data-i18n="reminderSaveBtn">Save reminder</button>
-      </form>
-    </section>
-  </div>
-
-  <!-- 5. Tips & safety -->
-  <div class="sec" id="sec-tips">
-    <p class="sec__label"><span class="ico" data-icon="bulb"></span><span data-i18n="grpTips">Tips &amp; safety</span></p>
-
-    <section class="card" aria-labelledby="knowledgeTitle">
-      <div class="card__head">
-        <h2 id="knowledgeTitle" data-i18n="knowledgeTitle">Knowledge tip</h2>
-      </div>
-      <p class="knowledge-tip" id="knowledgeTip"></p>
-      <button type="button" id="nextTipBtn" class="btn-secondary" data-i18n="nextTipBtn">Next tip</button>
-    </section>
-
-    <div class="two-col">
-      <section class="card" aria-labelledby="guideTitle">
-        <div class="card__head">
-          <h2 id="guideTitle" data-i18n="guideTitle">Application guide</h2>
-        </div>
-        <ol class="stepped" id="guideList"></ol>
-      </section>
-
-      <section class="card" aria-labelledby="safetyTitle">
-        <div class="card__head">
-          <h2 id="safetyTitle" data-i18n="safetyTitle">Safety &amp; storage</h2>
-        </div>
-        <ul class="safety-list" id="safetyList"></ul>
-      </section>
-    </div>
-  </div>
-
-  <p class="foot-note" data-i18n="footNote">
-    Recommendations are general guidance. Confirm exact dosage with your local agriculture officer or soil-testing report.
-  </p>
-
-</main>
-
-<nav class="bottomnav" aria-label="Sections">
-  <a href="#sec-recommend" class="is-active"><span class="ico" data-icon="sprout"></span><span data-i18n="navRecommend">Recommend</span></a>
-  <a href="#sec-library"><span class="ico" data-icon="flask"></span><span data-i18n="navLibrary">Library</span></a>
-  <a href="#sec-schedule"><span class="ico" data-icon="calendar"></span><span data-i18n="navSchedule">Schedule</span></a>
-  <a href="#sec-track"><span class="ico" data-icon="clipboard"></span><span data-i18n="navTrack">Track</span></a>
-  <a href="#sec-tips"><span class="ico" data-icon="bulb"></span><span data-i18n="navTips">Tips</span></a>
-</nav>
-
-<script>
-/* ===================================================
-   AgriNova — Fertilizer Management logic (app edition)
-   EN / TA toggle, smart recommendation engine with
-   quantities + stage plan, AI-powered field insight,
-   soil analysis, library, schedule, warnings, history
-   (multi-fertilizer), reminders, tips.
-=================================================== */
-
-(function () {
-  "use strict";
-
-  const $ = (id) => document.getElementById(id);
-
-  // Your Render backend URL. This page is served from a different origin
-  // (e.g. a local Live Server), so it must call the FULL backend URL.
-  const API_BASE = "https://disease-detector-e5du.onrender.com";
-
-  function escapeHTML(str) {
-    const d = document.createElement("div");
-    d.textContent = str == null ? "" : String(str);
-    return d.innerHTML;
-  }
-
-  /* ---------------- Icons (inline SVG) ---------------- */
-
-  const ICONS = {
-    sprout: '<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
-    leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
-    flask: '<path d="M10 2v7.5a2 2 0 0 1-.2.9L4.7 20.5a1 1 0 0 0 .9 1.5h12.8a1 1 0 0 0 .9-1.5l-5.1-10.1a2 2 0 0 1-.2-.9V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
-    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-    clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
-    bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/>',
-    drop: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
-    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
-    shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
-    chart: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
-    share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
-    print: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
-    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
-    compass: '<circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
-    swap: '<path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/>',
-    sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
-  };
-
-  function icon(name) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
-  }
-  function injectIcons(root) {
-    (root || document).querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
-  }
-
-  /* ---------------- Static UI text ---------------- */
-
-  const STRINGS = {
-    en: {
-      title: "Fertilizer Management",
-      heroEyebrow: "Smart farming assistant",
-      heroTitle: "Right fertilizer. Right dose. Right time.",
-      heroSub: "Get a complete crop-wise fertilizer plan for your field: exact quantities, stage-wise timing, organic support and safety tips.",
-      heroAsk: "What are you growing?",
-      navRecommend: "Recommend",
-      navLibrary: "Library",
-      navSchedule: "Schedule",
-      navTrack: "Track",
-      navTips: "Tips",
-      grpSmart: "Smart recommendation",
-      formTitle: "Field details",
-      formHint: "All fields required",
-      cropLabel: "Select crop",
-      soilLabel: "Select soil type",
-      areaLabel: "Land area (acres)",
-      nutrientLabel: "Soil nutrient status (from your soil test)",
-      nLabel: "Nitrogen (N)",
-      pLabel: "Phosphorus (P)",
-      kLabel: "Potassium (K)",
-      low: "Low",
-      medium: "Medium",
-      high: "High",
-      btn: "Get my fertilizer plan",
-      resultTitle: "Your fertilizer plan",
-      resultPlaceholder: "Fill in your field details above and tap “Get my fertilizer plan”. Your quantities, stage-wise schedule and care tips will appear here.",
-      planFor: "Fertilizer plan for",
-      acreUnit: "acre(s)",
-      secRequirement: "Fertilizer requirement",
-      colProduct: "Fertilizer",
-      colQty: "Quantity",
-      colBags: "Bags",
-      qtyNote: "Quantities are for {area} acre(s) and adjusted to your soil-test status. Bag sizes: urea 45 kg, others 50 kg.",
-      allHighNote: "Your soil is already rich in all three nutrients, so doses are cut by half. Focus on organic matter and avoid extra chemical fertilizer.",
-      secPlan: "Stage-wise application plan",
-      secOrganic: "Organic & bio-fertilizer support",
-      fymTitle: "Farmyard manure / compost",
-      fymText: "{t} tonnes, mixed into the soil during land preparation.",
-      bioTitle: "Bio-fertilizers",
-      extraTitle: "Extra organic tip",
-      secMicro: "Micronutrients & special care",
-      secSoil: "Advice for your soil type",
-      secAlt: "If a fertilizer is not available",
-      secCaution: "Watch out",
-      secAi: "AI insight for your field",
-      aiLoading: "Fetching a personalized AI tip for this field...",
-      aiError: "Could not fetch the AI insight — the rest of your plan above is still valid.",
-      aiFertilizerName: "Suggested product",
-      aiDosage: "Dosage",
-      aiApplication: "How & when",
-      aiStage: "Current stage",
-      aiTip: "Extra tip",
-      btnShare: "Share on WhatsApp",
-      btnPrint: "Print plan",
-      nutriTitle: "Soil nutrient analysis",
-      nutriPlaceholder: "Submit your field details above to see your soil fertility index, N-P-K levels and what they mean.",
-      fertilityIndex: "Soil fertility index",
-      fertLow: "Needs attention",
-      fertMid: "Moderate",
-      fertGood: "Good",
-      rowFertilizer: "Fertilizer",
-      selectFertPh: "Select fertilizer(s)",
-      grpLibrary: "Fertilizer library",
-      libraryTitle: "Browse by type",
-      typesHint: "Tap to expand",
-      tabChemical: "Chemical",
-      tabOrganic: "Organic",
-      tabInorganic: "Minerals",
-      tabBio: "Bio-fertilizers",
-      grpSchedule: "Schedule, irrigation & warnings",
-      scheduleTitle: "Fertilizer schedule",
-      irrigationTitle: "Fertilizer + irrigation",
-      warningTitle: "Warning signs to watch",
-      grpHistory: "History, tracking & reminders",
-      historyTitle: "Usage history",
-      historyHint: "Your saved log",
-      logDateLabel: "Date",
-      logQtyLabel: "Quantity",
-      logAddBtn: "Add entry",
-      historyEmpty: "No entries yet — add your first application above.",
-      effectTitle: "Effect tracking",
-      effectHint: "Rate your latest entry",
-      effectEmpty: "Add a usage entry first to track its effect.",
-      effectNotesPh: "Notes on crop response...",
-      effectSaveBtn: "Save effect",
-      effectSaved: "Saved",
-      reminderTitle: "Set a reminder",
-      reminderDateLabel: "Next application date",
-      reminderNoteLabel: "Note",
-      reminderSaveBtn: "Save reminder",
-      reminderDueSoon: "days left —",
-      reminderOverdue: "Overdue —",
-      reminderToday: "Due today —",
-      grpTips: "Tips & safety",
-      knowledgeTitle: "Knowledge tip",
-      nextTipBtn: "Next tip",
-      guideTitle: "Application guide",
-      safetyTitle: "Safety & storage",
-      footNote: "Recommendations are general guidance. Confirm exact dosage with your local agriculture officer or soil-testing report.",
-    },
-    ta: {
-      title: "உர மேலாண்மை",
-      heroEyebrow: "நுண்ணறிவு விவசாய உதவியாளர்",
-      heroTitle: "சரியான உரம். சரியான அளவு. சரியான நேரம்.",
-      heroSub: "உங்கள் நிலத்திற்கான முழுமையான பயிர் வாரியான உரத் திட்டத்தைப் பெறுங்கள்: சரியான அளவுகள், நிலை வாரியான நேரம், இயற்கை உர ஆதரவு மற்றும் பாதுகாப்பு குறிப்புகள்.",
-      heroAsk: "நீங்கள் என்ன பயிரிடுகிறீர்கள்?",
-      navRecommend: "பரிந்துரை",
-      navLibrary: "நூலகம்",
-      navSchedule: "அட்டவணை",
-      navTrack: "பதிவு",
-      navTips: "குறிப்புகள்",
-      grpSmart: "நுண்ணறிவு பரிந்துரை",
-      formTitle: "நில விவரங்கள்",
-      formHint: "அனைத்தும் கட்டாயம்",
-      cropLabel: "பயிரைத் தேர்ந்தெடுக்கவும்",
-      soilLabel: "மண் வகையைத் தேர்ந்தெடுக்கவும்",
-      areaLabel: "நில பரப்பு (ஏக்கர்)",
-      nutrientLabel: "மண் ஊட்டச்சத்து நிலை (மண் பரிசோதனை அடிப்படையில்)",
-      nLabel: "நைட்ரஜன் (N)",
-      pLabel: "பாஸ்பரஸ் (P)",
-      kLabel: "பொட்டாசியம் (K)",
-      low: "குறைவு",
-      medium: "நடுத்தரம்",
-      high: "அதிகம்",
-      btn: "எனது உரத் திட்டத்தைப் பெறு",
-      resultTitle: "உங்கள் உரத் திட்டம்",
-      resultPlaceholder: "மேலே நில விவரங்களை நிரப்பி “எனது உரத் திட்டத்தைப் பெறு” என்பதைத் தட்டவும். உங்கள் உர அளவுகள், நிலை வாரியான அட்டவணை மற்றும் பராமரிப்பு குறிப்புகள் இங்கே தோன்றும்.",
-      planFor: "உரத் திட்டம்:",
-      acreUnit: "ஏக்கர்",
-      secRequirement: "உரத் தேவை",
-      colProduct: "உரம்",
-      colQty: "அளவு",
-      colBags: "மூட்டை",
-      qtyNote: "அளவுகள் {area} ஏக்கருக்கானவை; உங்கள் மண் பரிசோதனை நிலைக்கு ஏற்ப சரிசெய்யப்பட்டவை. மூட்டை எடை: யூரியா 45 கிலோ, மற்றவை 50 கிலோ.",
-      allHighNote: "உங்கள் மண்ணில் மூன்று ஊட்டச்சத்துகளும் ஏற்கனவே அதிகமாக உள்ளதால் அளவுகள் பாதியாகக் குறைக்கப்பட்டுள்ளன. கரிமப் பொருளில் கவனம் செலுத்துங்கள்; கூடுதல் இரசாயன உரத்தைத் தவிர்க்கவும்.",
-      secPlan: "நிலை வாரியான உரமிடும் திட்டம்",
-      secOrganic: "இயற்கை & உயிர் உர ஆதரவு",
-      fymTitle: "தொழுவுரம் / உரக்குவியல்",
-      fymText: "{t} டன், நில தயாரிப்பின் போது மண்ணில் கலக்கவும்.",
-      bioTitle: "உயிர் உரங்கள்",
-      extraTitle: "கூடுதல் இயற்கை குறிப்பு",
-      secMicro: "நுண்ணூட்டம் & சிறப்பு கவனிப்பு",
-      secSoil: "உங்கள் மண் வகைக்கான ஆலோசனை",
-      secAlt: "உரம் கிடைக்கவில்லை எனில்",
-      secCaution: "கவனிக்க வேண்டியவை",
-      secAi: "உங்கள் நிலத்திற்கான AI பரிந்துரை",
-      aiLoading: "இந்த நிலத்திற்கான தனிப்பயன் AI குறிப்பைப் பெறுகிறது...",
-      aiError: "AI குறிப்பைப் பெற முடியவில்லை — மேலே உள்ள மற்ற திட்டம் இன்னும் செல்லுபடியாகும்.",
-      aiFertilizerName: "பரிந்துரைக்கப்பட்ட உரம்",
-      aiDosage: "அளவு",
-      aiApplication: "எப்படி & எப்போது",
-      aiStage: "தற்போதைய நிலை",
-      aiTip: "கூடுதல் குறிப்பு",
-      btnShare: "வாட்ஸ்அப்பில் பகிர்",
-      btnPrint: "திட்டத்தை அச்சிடு",
-      nutriTitle: "மண் ஊட்டச்சத்து பகுப்பாய்வு",
-      nutriPlaceholder: "மேலே நில விவரங்களைச் சமர்ப்பித்து உங்கள் மண் வளக் குறியீடு, N-P-K அளவுகள் மற்றும் அவற்றின் பொருளைப் பாருங்கள்.",
-      fertilityIndex: "மண் வளக் குறியீடு",
-      fertLow: "கவனம் தேவை",
-      fertMid: "மிதமானது",
-      fertGood: "நல்லது",
-      rowFertilizer: "உரம்",
-      selectFertPh: "உரங்களைத் தேர்ந்தெடுக்கவும்",
-      grpLibrary: "உர நூலகம்",
-      libraryTitle: "வகை வாரியாகப் பார்க்க",
-      typesHint: "விரிவாக்க தட்டவும்",
-      tabChemical: "இரசாயனம்",
-      tabOrganic: "இயற்கை",
-      tabInorganic: "கனிம",
-      tabBio: "உயிர் உரம்",
-      grpSchedule: "அட்டவணை, நீர்ப்பாசனம் & எச்சரிக்கை",
-      scheduleTitle: "உர அட்டவணை",
-      irrigationTitle: "உரம் + நீர்ப்பாசனம்",
-      warningTitle: "கவனிக்க வேண்டிய எச்சரிக்கை அறிகுறிகள்",
-      grpHistory: "வரலாறு, கண்காணிப்பு & நினைவூட்டல்",
-      historyTitle: "பயன்பாட்டு வரலாறு",
-      historyHint: "உங்கள் சேமிக்கப்பட்ட பதிவு",
-      logDateLabel: "தேதி",
-      logQtyLabel: "அளவு",
-      logAddBtn: "பதிவு சேர்க்கவும்",
-      historyEmpty: "இன்னும் பதிவுகள் இல்லை — மேலே உங்கள் முதல் பயன்பாட்டைச் சேர்க்கவும்.",
-      effectTitle: "பாதிப்பு கண்காணிப்பு",
-      effectHint: "உங்கள் சமீபத்திய பதிவை மதிப்பிடவும்",
-      effectEmpty: "பாதிப்பைக் கண்காணிக்க முதலில் ஒரு பயன்பாட்டுப் பதிவைச் சேர்க்கவும்.",
-      effectNotesPh: "பயிர் தாக்கம் குறித்த குறிப்புகள்...",
-      effectSaveBtn: "பாதிப்பைச் சேமிக்கவும்",
-      effectSaved: "சேமிக்கப்பட்டது",
-      reminderTitle: "நினைவூட்டலை அமைக்கவும்",
-      reminderDateLabel: "அடுத்த பயன்பாட்டு தேதி",
-      reminderNoteLabel: "குறிப்பு",
-      reminderSaveBtn: "நினைவூட்டலைச் சேமிக்கவும்",
-      reminderDueSoon: "நாட்கள் மீதம் —",
-      reminderOverdue: "தாமதமானது —",
-      reminderToday: "இன்று கடைசி நாள் —",
-      grpTips: "குறிப்புகள் & பாதுகாப்பு",
-      knowledgeTitle: "அறிவுக் குறிப்பு",
-      nextTipBtn: "அடுத்த குறிப்பு",
-      guideTitle: "பயன்பாட்டு வழிகாட்டி",
-      safetyTitle: "பாதுகாப்பு & சேமிப்பு",
-      footNote: "இவை பொதுவான வழிகாட்டுதல்கள். சரியான அளவை உங்கள் உள்ளூர் வேளாண் அலுவலரிடம் அல்லது மண் பரிசோதனை அறிக்கையில் உறுதிசெய்யவும்.",
-    },
-  };
-
-  /* ---------------- Crops & soils ---------------- */
-
-  const CROPS = [
-    { v: "rice", en: "Rice", ta: "நெல்" },
-    { v: "wheat", en: "Wheat", ta: "கோதுமை" },
-    { v: "maize", en: "Maize", ta: "மக்காச்சோளம்" },
-    { v: "sorghum", en: "Sorghum", ta: "சோளம்" },
-    { v: "pearlmillet", en: "Pearl millet", ta: "கம்பு" },
-    { v: "fingermillet", en: "Finger millet (Ragi)", ta: "கேழ்வரகு" },
-    { v: "foxtailmillet", en: "Foxtail millet", ta: "தினை" },
-    { v: "barnyardmillet", en: "Barnyard millet", ta: "குதிரைவாலி" },
-    { v: "blackgram", en: "Black gram", ta: "உளுந்து" },
-    { v: "greengram", en: "Green gram", ta: "பாசிப்பயறு" },
-    { v: "redgram", en: "Red gram", ta: "துவரை" },
-    { v: "bengalgram", en: "Bengal gram", ta: "கொண்டைக்கடலை" },
-    { v: "cowpea", en: "Cowpea", ta: "தட்டைப்பயறு" },
-    { v: "horsegram", en: "Horse gram", ta: "கொள்ளு" },
-    { v: "groundnut", en: "Groundnut", ta: "நிலக்கடலை" },
-    { v: "sesame", en: "Sesame", ta: "எள்" },
-    { v: "sunflower", en: "Sunflower", ta: "சூரியகாந்தி" },
-    { v: "castor", en: "Castor", ta: "ஆமணக்கு" },
-    { v: "soybean", en: "Soybean", ta: "சோயாபீன்" },
-    { v: "mustard", en: "Mustard", ta: "கடுகு" },
-    { v: "tomato", en: "Tomato", ta: "தக்காளி" },
-    { v: "brinjal", en: "Brinjal", ta: "கத்தரி" },
-    { v: "chilli", en: "Chilli", ta: "மிளகாய்" },
-    { v: "okra", en: "Okra (Lady's finger)", ta: "வெண்டை" },
-    { v: "onion", en: "Onion", ta: "வெங்காயம்" },
-    { v: "potato", en: "Potato", ta: "உருளைக்கிழங்கு" },
-    { v: "cabbage", en: "Cabbage", ta: "முட்டைகோஸ்" },
-    { v: "cauliflower", en: "Cauliflower", ta: "காலிஃபிளவர்" },
-    { v: "cucumber", en: "Cucumber", ta: "வெள்ளரி" },
-    { v: "bittergourd", en: "Bitter gourd", ta: "பாகற்காய்" },
-    { v: "drumstick", en: "Drumstick", ta: "முருங்கை" },
-    { v: "tapioca", en: "Tapioca", ta: "மரவள்ளிக்கிழங்கு" },
-    { v: "sweetpotato", en: "Sweet potato", ta: "சர்க்கரைவள்ளிக்கிழங்கு" },
-    { v: "carrot", en: "Carrot", ta: "கேரட்" },
-    { v: "beans", en: "Beans", ta: "அவரை / பீன்ஸ்" },
-    { v: "banana", en: "Banana", ta: "வாழை" },
-    { v: "mango", en: "Mango", ta: "மா" },
-    { v: "coconut", en: "Coconut", ta: "தென்னை" },
-    { v: "papaya", en: "Papaya", ta: "பப்பாளி" },
-    { v: "guava", en: "Guava", ta: "கொய்யா" },
-    { v: "grapes", en: "Grapes", ta: "திராட்சை" },
-    { v: "lemon", en: "Lemon / Citrus", ta: "எலுமிச்சை" },
-    { v: "pomegranate", en: "Pomegranate", ta: "மாதுளை" },
-    { v: "sapota", en: "Sapota", ta: "சப்போட்டா" },
-    { v: "pineapple", en: "Pineapple", ta: "அன்னாசி" },
-    { v: "turmeric", en: "Turmeric", ta: "மஞ்சள்" },
-    { v: "ginger", en: "Ginger", ta: "இஞ்சி" },
-    { v: "garlic", en: "Garlic", ta: "பூண்டு" },
-    { v: "coriander", en: "Coriander", ta: "கொத்தமல்லி" },
-    { v: "blackpepper", en: "Black pepper", ta: "மிளகு" },
-    { v: "cardamom", en: "Cardamom", ta: "ஏலக்காய்" },
-    { v: "tea", en: "Tea", ta: "தேயிலை" },
-    { v: "coffee", en: "Coffee", ta: "காபி" },
-    { v: "cashew", en: "Cashew", ta: "முந்திரி" },
-    { v: "arecanut", en: "Arecanut", ta: "பாக்கு" },
-    { v: "rubber", en: "Rubber", ta: "ரப்பர்" },
-  ];
-
-  const SOILS = [
-    { v: "loamy", en: "Loamy soil", ta: "வண்டல் மண்" },
-    { v: "clay", en: "Clay soil", ta: "களிமண்" },
-    { v: "sandy", en: "Sandy soil", ta: "மணல் மண்" },
-    { v: "red", en: "Red soil", ta: "சிவப்பு மண்" },
-    { v: "black", en: "Black soil", ta: "கரிசல் மண்" },
-    { v: "alluvial", en: "Alluvial soil", ta: "ஆற்று வண்டல் மண்" },
-    { v: "laterite", en: "Laterite soil", ta: "லேட்டரைட் (செம்பொறை) மண்" },
-    { v: "silty", en: "Silty soil", ta: "சேற்று மண்" },
-    { v: "sandyloam", en: "Sandy loam", ta: "மணல் கலந்த வண்டல் மண்" },
-    { v: "saline", en: "Saline soil", ta: "உவர் மண்" },
-    { v: "alkaline", en: "Alkaline / sodic soil", ta: "கார மண்" },
-    { v: "acidic", en: "Acidic soil", ta: "அமில மண்" },
-    { v: "calcareous", en: "Calcareous soil", ta: "சுண்ணாம்பு மண்" },
-    { v: "hill", en: "Hill / forest soil", ta: "மலை மண்" },
-  ];
-
-  const LEVELS = ["low", "medium", "high"];
-
-  /* ---------------- Fertilizer library ---------------- */
-
-  const FERTS = [
-    /* Chemical */
-    { v: "urea", label: "Urea", category: "chemical", color: "#2F73C4",
-      en: "46% nitrogen. Boosts leafy growth and greening. Apply in 2–3 split doses to reduce loss through leaching.",
-      ta: "46% நைட்ரஜன் கொண்டது. இலைப் பசுமையையும் வளர்ச்சியையும் அதிகரிக்கும். இழப்பைக் குறைக்க 2–3 பகுதிகளாகப் பிரித்து இடவும்." },
-    { v: "dap", label: "DAP", category: "chemical", color: "#1F7A48",
-      en: "Di-ammonium phosphate (18-46-0). High in phosphorus, supports strong root development. Best applied as a basal dose at sowing.",
-      ta: "டை-அம்மோனியம் பாஸ்பேட் (18-46-0). அதிக பாஸ்பரஸ் கொண்டது, வேர் வளர்ச்சிக்கு உதவும். விதைக்கும் போது அடிப்படை உரமாக இடவும்." },
-    { v: "npk", label: "NPK", category: "chemical", color: "#6B4423",
-      en: "Balanced complex fertilizer with nitrogen, phosphorus and potassium together. A general-purpose choice across most crops and stages.",
-      ta: "நைட்ரஜன், பாஸ்பரஸ், பொட்டாசியம் ஆகிய மூன்றும் சமநிலையில் கொண்ட கூட்டு உரம். பெரும்பாலான பயிர்களுக்கும் நிலைகளுக்கும் பொருந்தும்." },
-    { v: "mop", label: "MOP", category: "chemical", color: "#8347C7",
-      en: "Muriate of potash — around 60% potassium. Improves disease resistance, grain filling and overall crop quality.",
-      ta: "பொட்டாஷ் முரியேட் (MOP) — சுமார் 60% பொட்டாசியம். நோய் எதிர்ப்பு சக்தி, தானிய நிறைவு மற்றும் பயிர் தரத்தை மேம்படுத்தும்." },
-    { v: "ssp", label: "SSP", category: "chemical", color: "#B4620F",
-      en: "Single super phosphate — phosphorus with sulphur and calcium. Well suited to oilseeds and pulses.",
-      ta: "சிங்கிள் சூப்பர் பாஸ்பேட் (SSP) — பாஸ்பரஸுடன் கந்தகமும் கால்சியமும் கொண்டது. எண்ணெய் வித்துக்கள் மற்றும் பயறு வகைகளுக்கு ஏற்றது." },
-    { v: "ammsulphate", label: "Ammonium sulphate", category: "chemical", color: "#2F73C4", b: "AS",
-      en: "20.6% nitrogen plus 24% sulphur. Good for oilseeds, sugarcane and alkaline soils. It acidifies soil slowly, so avoid it on already acidic soils.",
-      ta: "20.6% நைட்ரஜனும் 24% கந்தகமும் கொண்டது. எண்ணெய் வித்துக்கள், கரும்பு மற்றும் கார மண்ணுக்கு நல்லது. மண்ணை மெதுவாக அமிலமாக்குவதால் ஏற்கனவே அமில மண்ணில் தவிர்க்கவும்." },
-    { v: "complex20", label: "Complex 20-20-0-13", category: "chemical", color: "#1F7A48", b: "20-20",
-      en: "Ammonium phosphate sulphate: nitrogen, phosphorus and sulphur in one granule. A handy basal fertilizer for oilseeds, cotton and cereals.",
-      ta: "அம்மோனியம் பாஸ்பேட் சல்பேட்: நைட்ரஜன், பாஸ்பரஸ், கந்தகம் ஒரே மணியில். எண்ணெய் வித்துக்கள், பருத்தி மற்றும் தானியப் பயிர்களுக்கு வசதியான அடி உரம்." },
-    { v: "npk19", label: "19:19:19 (water soluble)", category: "chemical", color: "#6B4423", b: "19s",
-      en: "Balanced water-soluble NPK for drip fertigation and foliar spray. Useful for a quick boost at critical stages such as flowering.",
-      ta: "சொட்டு நீர் உரப்பாசனம் மற்றும் இலைவழி தெளிப்புக்கான நீரில் கரையும் சமநிலை NPK. பூக்கும் போன்ற முக்கிய நிலைகளில் விரைவான ஊக்கம் தரும்." },
-    { v: "kno3", label: "Potassium nitrate", category: "chemical", color: "#8347C7", b: "KNO3",
-      en: "13% nitrogen and 45% potash, free of chloride. Ideal through drip for cotton, sugarcane and vegetables during flowering and boll or fruit development.",
-      ta: "13% நைட்ரஜன் மற்றும் 45% பொட்டாஷ், குளோரைடு இல்லாதது. பருத்தி, கரும்பு, காய்கறிகளில் பூக்கும் மற்றும் காய் வளர்ச்சி நிலையில் சொட்டு நீர் மூலம் இட ஏற்றது." },
-    /* Organic */
-    { v: "organic", label: "Compost / FYM", category: "organic", color: "#1F4D36",
-      en: "Compost or farmyard manure. Builds soil structure and microbial life over time — best used alongside chemical fertilizers.",
-      ta: "உரக்குவியல் அல்லது தொழுவ உரம். காலப்போக்கில் மண் அமைப்பையும் நுண்ணுயிர் வளர்ச்சியையும் மேம்படுத்தும் — இரசாயன உரங்களுடன் இணைத்துப் பயன்படுத்தலாம்." },
-    { v: "vermicompost", label: "Vermicompost", category: "organic", color: "#1F7A48",
-      en: "Earthworm-processed compost, rich in humus and micronutrients. Improves water retention in sandy soils.",
-      ta: "மண்புழு மூலம் தயாரிக்கப்பட்ட உரம், ஹியூமஸ் மற்றும் நுண்ணூட்டச்சத்துகள் நிறைந்தது. மணல் மண்ணின் நீர் தேக்கும் திறனை மேம்படுத்தும்." },
-    { v: "greenmanure", label: "Green manure", category: "organic", color: "#6B4423",
-      en: "Fast-growing legumes like sunhemp or daincha ploughed back into the soil, adding nitrogen and organic matter naturally.",
-      ta: "சணப்பை, தக்கைப்பூண்டு போன்ற வேகமாக வளரும் பயறு வகைகளை மண்ணில் உழுது சேர்ப்பது, இயற்கையாக நைட்ரஜனையும் கரிமப்பொருளையும் சேர்க்கும்." },
-    { v: "neemcake", label: "Neem cake", category: "organic", color: "#B4620F",
-      en: "Neem cake (about 5% N) releases nitrogen slowly and repels soil pests and nematodes. A good basal dose for cotton, maize and vegetables.",
-      ta: "வேப்பம் புண்ணாக்கு (சுமார் 5% N) நைட்ரஜனை மெதுவாக வெளியிட்டு மண் பூச்சிகளையும் நூற்புழுக்களையும் விரட்டும். பருத்தி, சோளம் மற்றும் காய்கறிகளுக்கு நல்ல அடி உரம்." },
-    { v: "poultry", label: "Poultry manure", category: "organic", color: "#8347C7",
-      en: "Rich in N, P and K and faster acting than FYM. Compost it for a few weeks first and keep it from touching seedlings directly.",
-      ta: "N, P, K நிறைந்தது; தொழுவுரத்தை விட விரைவாகச் செயல்படும். சில வாரங்கள் மக்கச் செய்த பின்னரே பயன்படுத்தவும்; நாற்றுகளில் நேரடியாகப் படாமல் பார்க்கவும்." },
-    { v: "panchagavya", label: "Panchagavya", category: "organic", color: "#1F4D36",
-      en: "Traditional liquid made from cow dung, urine, milk, curd and ghee. Diluted to 3% and sprayed to boost growth and plant immunity.",
-      ta: "மாட்டுச் சாணம், சிறுநீர், பால், தயிர், நெய் ஆகியவற்றிலிருந்து தயாரிக்கப்படும் பாரம்பரிய திரவம். 3% அளவில் நீர்த்து தெளித்தால் வளர்ச்சியும் எதிர்ப்பு சக்தியும் அதிகரிக்கும்." },
-    { v: "jeevamrutham", label: "Jeevamrutham", category: "organic", color: "#1F7A48",
-      en: "Fermented mix of cow dung, urine, jaggery, pulse flour and soil. Applied with irrigation water to multiply soil microbes; use within 7 days of preparation.",
-      ta: "மாட்டுச் சாணம், சிறுநீர், வெல்லம், பயறு மாவு மற்றும் மண் கலந்து புளிக்க வைக்கும் கலவை. நீர்ப்பாசனத்துடன் இட்டால் மண் நுண்ணுயிர்கள் பெருகும்; தயாரித்த 7 நாட்களுக்குள் பயன்படுத்தவும்." },
-    /* Minerals / micronutrients */
-    { v: "gypsum", label: "Gypsum", category: "inorganic", color: "#B4620F",
-      en: "Calcium sulphate mineral. Improves clay soil structure and supplies calcium and sulphur, especially useful for groundnut.",
-      ta: "கால்சியம் சல்பேட் கனிமம். களிமண் அமைப்பை மேம்படுத்தி கால்சியம் மற்றும் கந்தகத்தை வழங்கும், குறிப்பாக நிலக்கடலைக்கு பயனுள்ளது." },
-    { v: "lime", label: "Lime", category: "inorganic", color: "#26302A",
-      en: "Corrects acidic soils by raising pH, making other nutrients more available to the crop.",
-      ta: "மண்ணின் pH ஐ உயர்த்தி அமிலத் தன்மையைச் சரிசெய்யும், இதனால் மற்ற ஊட்டச்சத்துகள் பயிருக்கு எளிதில் கிடைக்கும்." },
-    { v: "zincsulphate", label: "Zinc sulphate", category: "inorganic", color: "#2F73C4",
-      en: "Corrects zinc deficiency, seen as pale, stunted growth — common in rice and maize on sandy soils.",
-      ta: "துத்தநாக குறைபாட்டைச் சரிசெய்யும், மணல் மண்ணில் நெல் மற்றும் சோளத்தில் வெளிர் நிற வளர்ச்சி குன்றலாகத் தெரியும்." },
-    { v: "borax", label: "Borax", category: "inorganic", color: "#8347C7",
-      en: "Supplies boron, important for flowering and fruit-set in cotton and oilseed crops.",
-      ta: "போரான் வழங்கும், பருத்தி மற்றும் எண்ணெய் வித்துப் பயிர்களில் பூக்கும் மற்றும் காய்க்கும் நிலைக்கு முக்கியமானது." },
-    { v: "ferroussulphate", label: "Ferrous sulphate", category: "inorganic", color: "#6B4423",
-      en: "Corrects iron deficiency (yellow young leaves with green veins), common in groundnut and sugarcane on calcareous or black soils. Use as a 0.5% foliar spray.",
-      ta: "இரும்புச் சத்து குறைபாட்டைச் சரிசெய்யும் (பச்சை நரம்புகளுடன் மஞ்சள் இளம் இலைகள்); சுண்ணாம்பு அல்லது கரிசல் மண்ணில் நிலக்கடலை, கரும்பில் பொதுவானது. 0.5% இலைவழி தெளிப்பாக இடவும்." },
-    { v: "mgsulphate", label: "Magnesium sulphate", category: "inorganic", color: "#1F7A48",
-      en: "Supplies magnesium and sulphur. A 1% foliar spray corrects reddening of cotton leaves and yellowing between the veins.",
-      ta: "மெக்னீசியம் மற்றும் கந்தகத்தை வழங்கும். 1% இலைவழி தெளிப்பு பருத்தி இலைகள் சிவப்பாவதையும் நரம்புகளுக்கிடையே மஞ்சளாவதையும் சரிசெய்யும்." },
-    /* Bio-fertilizers */
-    { v: "rhizobium", label: "Rhizobium", category: "bio", color: "#1F4D36",
-      en: "Bacterial culture for pulses and groundnut that fixes atmospheric nitrogen at the root nodules, cutting urea needs.",
-      ta: "பயறு மற்றும் நிலக்கடலைக்கான பாக்டீரியா கலவை, வேர் முடிச்சுகளில் வளிமண்டல நைட்ரஜனைச் சேகரித்து யூரியா தேவையைக் குறைக்கும்." },
-    { v: "azospirillum", label: "Azospirillum", category: "bio", color: "#1F7A48",
-      en: "Free-living bacteria used with cereals like rice, maize and wheat to boost nitrogen availability.",
-      ta: "நெல், சோளம், கோதுமை போன்ற தானியப் பயிர்களுடன் பயன்படுத்தப்படும் சுதந்திரமான பாக்டீரியா, நைட்ரஜன் கிடைப்பதை மேம்படுத்தும்." },
-    { v: "psb", label: "PSB", category: "bio", color: "#B4620F",
-      en: "Phosphate-solubilising bacteria that unlock soil-bound phosphorus, making it available to the crop.",
-      ta: "மண்ணில் பூட்டப்பட்ட பாஸ்பரஸை வெளியிடும் பாஸ்பேட் கரைப்பான் பாக்டீரியா, பயிருக்கு எளிதில் கிடைக்கச் செய்யும்." },
-    { v: "azotobacter", label: "Azotobacter", category: "bio", color: "#6B4423",
-      en: "Soil bacteria that fix nitrogen non-symbiotically — suits a wide range of non-leguminous crops.",
-      ta: "தானாகவே நைட்ரஜனைச் சேகரிக்கும் மண் பாக்டீரியா — பயறு அல்லாத பரந்த வகையான பயிர்களுக்குப் பொருந்தும்." },
-    { v: "trichoderma", label: "Trichoderma", category: "bio", color: "#2F73C4",
-      en: "Beneficial fungus that suppresses root rot, wilt and damping-off. Use for seed treatment or mix with FYM before applying to soil.",
-      ta: "வேர் அழுகல், வாடல் மற்றும் நாற்றழுகல் நோய்களை அடக்கும் நன்மை தரும் பூஞ்சை. விதை நேர்த்தி அல்லது தொழுவுரத்துடன் கலந்து மண்ணில் இடலாம்." },
-    { v: "vam", label: "VAM (mycorrhiza)", category: "bio", color: "#8347C7", b: "VAM",
-      en: "Mycorrhizal fungi that extend the reach of roots, improving phosphorus and water uptake — useful in low-phosphorus soils.",
-      ta: "வேர்களின் எல்லையை விரிவாக்கும் மைக்கோரைசா பூஞ்சை; பாஸ்பரஸ் மற்றும் நீர் உறிஞ்சுதலை மேம்படுத்தும் — குறைந்த பாஸ்பரஸ் மண்ணில் பயனுள்ளது." },
-    { v: "kmb", label: "Potash-mobilising bacteria", category: "bio", color: "#B4620F", b: "KMB",
-      en: "Bacteria that release potassium locked in soil minerals, helping reduce the need for MOP.",
-      ta: "மண் கனிமங்களில் பூட்டப்பட்ட பொட்டாசியத்தை விடுவிக்கும் பாக்டீரியா; MOP தேவையைக் குறைக்க உதவும்." },
-    { v: "azolla", label: "Azolla", category: "bio", color: "#1F4D36",
-      en: "Floating water fern that fixes nitrogen in rice fields. Grow it in the field or add it as green manure.",
-      ta: "நெல் வயலில் நைட்ரஜனைச் சேகரிக்கும் அசோலா எனும் மிதக்கும் நீர்ச்செடி. வயலில் வளர்த்தோ பசுந்தாள் உரமாகவோ சேர்க்கலாம்." },
-  ];
-
-  const LIBRARY_TABS = ["chemical", "organic", "inorganic", "bio"];
-  const LIBRARY_TAB_KEY = { chemical: "tabChemical", organic: "tabOrganic", inorganic: "tabInorganic", bio: "tabBio" };
-  let activeLibraryTab = "chemical";
-
-  /* ---------------- Fertilizer schedule (with split fractions) ----------------
-     f = share of the total N / P / K applied at that stage. */
-
-  const SCHEDULE = {
-    rice: [
-      { en: "Basal (at transplanting)", ta: "அடிப்படை (நடவின் போது)", f: { n: 1 / 3, p: 1, k: 0.5 }, detailEn: "Full phosphorus + half potash + one-third nitrogen (as DAP + MOP + Urea).", detailTa: "முழு பாஸ்பரஸ் + பாதி பொட்டாஷ் + மூன்றில் ஒரு பங்கு நைட்ரஜன் (DAP + MOP + யூரியா)." },
-      { en: "Tillering (20–25 days)", ta: "பகிர்வு (20–25 நாட்கள்)", f: { n: 1 / 3, p: 0, k: 0 }, detailEn: "One-third nitrogen as urea top dressing.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜனை யூரியாவாக மேல் உரம் இடவும்." },
-      { en: "Panicle initiation", ta: "கதிர் தொடக்கம்", f: { n: 1 / 3, p: 0, k: 0.5 }, detailEn: "Remaining nitrogen + remaining potash.", detailTa: "மீதமுள்ள நைட்ரஜன் + மீதமுள்ள பொட்டாஷ்." },
-    ],
-    wheat: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 0.5, p: 1, k: 1 }, detailEn: "Full phosphorus and potash + half nitrogen.", detailTa: "முழு பாஸ்பரஸ் மற்றும் பொட்டாஷ் + பாதி நைட்ரஜன்." },
-      { en: "Crown root initiation (20–25 days)", ta: "வேர் தொடக்க நிலை (20–25 நாட்கள்)", f: { n: 0.5, p: 0, k: 0 }, detailEn: "Remaining nitrogen as urea top dressing.", detailTa: "மீதமுள்ள நைட்ரஜனை யூரியாவாக மேல் உரம் இடவும்." },
-    ],
-    maize: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 1 / 3, p: 1, k: 1 }, detailEn: "Full phosphorus and potash + one-third nitrogen.", detailTa: "முழு பாஸ்பரஸ் மற்றும் பொட்டாஷ் + மூன்றில் ஒரு பங்கு நைட்ரஜன்." },
-      { en: "Knee-high stage", ta: "முழங்கால் உயர நிலை", f: { n: 1 / 3, p: 0, k: 0 }, detailEn: "One-third nitrogen as top dressing.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜனை மேல் உரமாக இடவும்." },
-      { en: "Tasseling stage", ta: "பூக்கொத்து நிலை", f: { n: 1 / 3, p: 0, k: 0 }, detailEn: "Remaining nitrogen as final top dressing.", detailTa: "மீதமுள்ள நைட்ரஜனை இறுதி மேல் உரமாக இடவும்." },
-    ],
-    sugarcane: [
-      { en: "Basal (at planting)", ta: "அடிப்படை (நடவின் போது)", f: { n: 1 / 3, p: 1, k: 1 / 3 }, detailEn: "Full phosphorus + one-third nitrogen and potash.", detailTa: "முழு பாஸ்பரஸ் + மூன்றில் ஒரு பங்கு நைட்ரஜன் மற்றும் பொட்டாஷ்." },
-      { en: "Tillering phase (45 days)", ta: "பகிர்வு நிலை (45 நாட்கள்)", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "One-third nitrogen and potash.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜன் மற்றும் பொட்டாஷ்." },
-      { en: "Grand growth phase (90–120 days)", ta: "பெரு வளர்ச்சி நிலை (90–120 நாட்கள்)", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "Remaining nitrogen and potash.", detailTa: "மீதமுள்ள நைட்ரஜன் மற்றும் பொட்டாஷ்." },
-    ],
-    cotton: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 1 / 3, p: 1, k: 1 / 3 }, detailEn: "Full phosphorus + one-third nitrogen and potash.", detailTa: "முழு பாஸ்பரஸ் + மூன்றில் ஒரு பங்கு நைட்ரஜன் மற்றும் பொட்டாஷ்." },
-      { en: "Square formation", ta: "மொட்டு உருவாகும் நிலை", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "One-third nitrogen and potash.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜன் மற்றும் பொட்டாஷ்." },
-      { en: "Boll development", ta: "காய் வளர்ச்சி நிலை", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "Remaining nitrogen and potash; add borax if buds are dropping.", detailTa: "மீதமுள்ள நைட்ரஜன் மற்றும் பொட்டாஷ்; மொட்டுகள் உதிர்ந்தால் போராக்ஸ் சேர்க்கவும்." },
-    ],
-    groundnut: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 1, p: 1, k: 1 }, detailEn: "Full phosphorus and potash with a light starter dose of nitrogen.", detailTa: "முழு பாஸ்பரஸ் மற்றும் பொட்டாஷுடன் லேசான தொடக்க நைட்ரஜன் அளவு." },
-      { en: "Flowering stage (40–45 days)", ta: "பூக்கும் நிலை (40–45 நாட்கள்)", f: { n: 0, p: 0, k: 0 }, gypsum: true, detailEn: "Apply gypsum near the root zone to support pod development.", detailTa: "காய் வளர்ச்சிக்கு உதவ வேர் பகுதிக்கு அருகில் ஜிப்சம் இடவும்." },
-    ],
-  };
-
-  /* ---------------- Crop-wise dose & care data (used by the engine) ----------------
-     n / p / k = kg of N, P2O5, K2O per acre at MEDIUM soil status. */
-
-  const CROP_PLAN = {
-    rice: {
-      n: 48, p: 16, k: 16, pSrc: "dap", fym: 5,
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, mixed with FYM and applied before transplanting. Azolla or blue-green algae can add extra nitrogen.",
-             ta: "அசோஸ்பைரில்லம் + PSB ஆகியவற்றை ஏக்கருக்கு தலா 2 கிலோ, தொழுவுரத்துடன் கலந்து நடவுக்கு முன் இடவும். கூடுதல் நைட்ரஜனுக்கு அசோலா அல்லது நீலப்பச்சைப் பாசி சேர்க்கலாம்." },
-      organic: { en: "Grow sunhemp or daincha as green manure and plough it in at about 45 days, before transplanting.",
-                 ta: "சணப்பை அல்லது தக்கைப்பூண்டை பசுந்தாள் உரமாக வளர்த்து, சுமார் 45 நாட்களில் நடவுக்கு முன் மடக்கி உழவும்." },
-      micro: { en: "Zinc sulphate 10 kg/acre as a basal dose (once every 2–3 crops). Spray 0.5% ferrous sulphate if young leaves turn yellow-white.",
-               ta: "துத்தநாக சல்பேட் ஏக்கருக்கு 10 கிலோ அடி உரமாக (2–3 பயிருக்கு ஒரு முறை). இளம் இலைகள் மஞ்சள்-வெள்ளையாக மாறினால் 0.5% இரும்பு சல்பேட் தெளிக்கவும்." },
-      caution: { en: "Keep a thin film of water and avoid draining the field for 2–3 days after top dressing, otherwise nitrogen is lost.",
-                 ta: "மேல் உரமிட்ட பின் 2–3 நாட்களுக்கு நீரை வடிக்காமல் மெல்லிய நீர்ப்படலம் வைத்திருக்கவும்; இல்லையெனில் நைட்ரஜன் வீணாகும்." },
-    },
-    wheat: {
-      n: 48, p: 24, k: 16, pSrc: "dap", fym: 4,
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, mixed with FYM and spread before sowing (or seed treatment as per the packet).",
-             ta: "அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 2 கிலோ, தொழுவுரத்துடன் கலந்து விதைப்பிற்கு முன் தூவவும் (அல்லது பாக்கெட் அளவின்படி விதை நேர்த்தி)." },
-      organic: { en: "Neem cake, about 100 kg/acre, with the basal dose improves nitrogen use efficiency.",
-                 ta: "அடி உரத்துடன் ஏக்கருக்கு சுமார் 100 கிலோ வேப்பம் புண்ணாக்கு இட்டால் நைட்ரஜன் பயன்பாட்டுத் திறன் கூடும்." },
-      micro: { en: "Zinc sulphate 10 kg/acre in zinc-deficient fields. Sulphur (from SSP or gypsum) improves grain protein.",
-               ta: "துத்தநாகக் குறைபாடுள்ள வயலில் துத்தநாக சல்பேட் ஏக்கருக்கு 10 கிலோ இடவும்; கந்தகம் (SSP அல்லது ஜிப்சம் மூலம்) தானியப் புரதத்தை மேம்படுத்தும்." },
-      caution: { en: "Irrigate right after the crown-root nitrogen top dressing so the fertilizer reaches the roots.",
-                 ta: "வேர் தொடக்க நிலையில் நைட்ரஜன் மேல் உரமிட்ட உடனே நீர் பாய்ச்சவும்; அப்போதுதான் அது வேர்களை அடையும்." },
-    },
-    maize: {
-      n: 100, p: 30, k: 30, pSrc: "dap", fym: 5,
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, with FYM at sowing. Seed treatment with the same works too.",
-             ta: "விதைப்பின் போது அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 2 கிலோ தொழுவுரத்துடன் இடவும்; விதை நேர்த்தியும் செய்யலாம்." },
-      organic: { en: "Vermicompost, about 1 tonne/acre, at sowing supports early growth and moisture holding.",
-                 ta: "விதைப்பின் போது ஏக்கருக்கு சுமார் 1 டன் மண்புழு உரம் இட்டால் ஆரம்ப வளர்ச்சியும் ஈரம் தேக்கும் திறனும் மேம்படும்." },
-      micro: { en: "Zinc sulphate 10 kg/acre as a basal dose. White stripes on young leaves mean zinc deficiency — spray 0.5% zinc sulphate.",
-               ta: "துத்தநாக சல்பேட் ஏக்கருக்கு 10 கிலோ அடி உரமாக இடவும். இளம் இலைகளில் வெள்ளைக் கோடுகள் தெரிந்தால் துத்தநாகக் குறைபாடு — 0.5% துத்தநாக சல்பேட் தெளிக்கவும்." },
-      caution: { en: "Top dress on moist soil and earth up after applying nitrogen. Keep fertilizer out of the leaf whorl to avoid burning.",
-                 ta: "ஈரமான மண்ணில் மேல் உரமிட்டு, உரமிட்ட பின் மண் அணைக்கவும்; இலைக் குருத்தில் உரம் படாமல் பார்க்கவும், இல்லையெனில் இலை கருகும்." },
-    },
-    sugarcane: {
-      n: 110, p: 25, k: 45, pSrc: "dap", fym: 10,
-      bio: { en: "Azospirillum + PSB, 4 kg/acre each, with FYM at planting. Trichoderma helps reduce sett rot.",
-             ta: "நடவின் போது அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 4 கிலோ தொழுவுரத்துடன் இடவும்; டிரைக்கோடெர்மா கரணை அழுகலைக் குறைக்கும்." },
-      organic: { en: "Press-mud compost (about 4 tonnes/acre) and trash mulching recycle nutrients and save water.",
-                 ta: "ஏக்கருக்கு சுமார் 4 டன் ஆலைக் கழிவு (பிரஸ்-மட்) உரம் மற்றும் தோகை மூடாக்கு ஊட்டச்சத்தை மறுசுழற்சி செய்து நீரைச் சேமிக்கும்." },
-      micro: { en: "Zinc sulphate 10–15 kg/acre and ferrous sulphate if leaves turn yellow. Enough potash raises the sugar content.",
-               ta: "இலைகள் மஞ்சளானால் துத்தநாக சல்பேட் ஏக்கருக்கு 10–15 கிலோ மற்றும் இரும்பு சல்பேட் இடவும். போதுமான பொட்டாஷ் கரும்பின் சர்க்கரை அளவை உயர்த்தும்." },
-      caution: { en: "Place fertilizer 5–8 cm away from the setts and cover with soil. Avoid nitrogen after the grand growth phase — it lowers sugar recovery.",
-                 ta: "உரத்தை கரணை வரிசையிலிருந்து 5–8 செ.மீ. தள்ளி இட்டு மண்ணால் மூடவும்; பெரு வளர்ச்சி நிலைக்குப் பின் நைட்ரஜன் இடுவதைத் தவிர்க்கவும், அது சர்க்கரை அளவைக் குறைக்கும்." },
-    },
-    cotton: {
-      n: 48, p: 24, k: 24, pSrc: "dap", fym: 5,
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, with FYM. Seed treatment with the same mix before sowing also helps.",
-             ta: "அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 2 கிலோ தொழுவுரத்துடன் இடவும்; விதைப்பிற்கு முன் இதே கலவையால் விதை நேர்த்தியும் செய்யலாம்." },
-      organic: { en: "Neem cake, about 100 kg/acre, with the basal dose helps against soil pests and improves nutrient use.",
-                 ta: "அடி உரத்துடன் ஏக்கருக்கு சுமார் 100 கிலோ வேப்பம் புண்ணாக்கு இட்டால் மண் பூச்சிகள் கட்டுப்படும்; ஊட்டச்சத்து பயன்பாடும் மேம்படும்." },
-      micro: { en: "Spray 2% DAP at flowering and again 15 days later to reduce square and boll shedding. Spray 1% magnesium sulphate if leaves turn red.",
-               ta: "பூக்கும் நிலையிலும் 15 நாட்கள் கழித்தும் 2% DAP கரைசல் தெளித்தால் மொட்டு, காய் உதிர்வு குறையும்; இலைகள் சிவப்பாக மாறினால் 1% மெக்னீசியம் சல்பேட் தெளிக்கவும்." },
-      caution: { en: "Excess nitrogen causes heavy leaf growth, more pest attack and delayed boll opening — do not over-apply.",
-                 ta: "அதிக நைட்ரஜன் இலை வளர்ச்சியை மிகைப்படுத்தி பூச்சித் தாக்குதலை அதிகரித்து காய் வெடிப்பைத் தாமதப்படுத்தும் — அளவை மீறாதீர்கள்." },
-    },
-    groundnut: {
-      n: 10, p: 20, k: 30, pSrc: "ssp", fym: 5, gypsum: 160,
-      bio: { en: "Seed treatment with Rhizobium + PSB (as per the packet) fixes nitrogen and unlocks phosphorus. Trichoderma seed treatment protects against root rot.",
-             ta: "ரைசோபியம் + PSB கொண்டு விதை நேர்த்தி (பாக்கெட் அளவின்படி) நைட்ரஜனைச் சேகரித்து பாஸ்பரஸை விடுவிக்கும்; டிரைக்கோடெர்மா விதை நேர்த்தி வேர் அழுகலைத் தடுக்கும்." },
-      organic: { en: "Well-decomposed FYM with Trichoderma before sowing reduces root and collar rot.",
-                 ta: "நன்கு மக்கிய தொழுவுரத்தை டிரைக்கோடெர்மாவுடன் விதைப்பிற்கு முன் இட்டால் வேர் மற்றும் கழுத்து அழுகல் குறையும்." },
-      micro: { en: "Gypsum 160 kg/acre at flowering supplies calcium and sulphur for pod filling. Spray 0.5% ferrous sulphate if leaves turn yellow (iron deficiency).",
-               ta: "பூக்கும் நிலையில் ஜிப்சம் ஏக்கருக்கு 160 கிலோ இடுவது காய் பிடிப்புக்கு கால்சியம், கந்தகம் தரும். இலைகள் மஞ்சளானால் (இரும்புக் குறைபாடு) 0.5% இரும்பு சல்பேட் தெளிக்கவும்." },
-      caution: { en: "Avoid heavy nitrogen — this crop fixes its own. Apply gypsum in the pegging zone and earth up.",
-                 ta: "அதிக நைட்ரஜன் வேண்டாம் — இப்பயிர் தானே சேகரிக்கும். ஜிப்சத்தை காய் பிடிக்கும் பகுதியில் இட்டு மண் அணைக்கவும்." },
-    },
-  };
-
-  const LEVEL_FACTOR = { low: 1.25, medium: 1, high: 0.5 };
-
-  const PRODUCT = {
-    urea:   { name: "Urea",   bag: 45, role: { en: "Nitrogen (46% N)", ta: "நைட்ரஜன் (46% N)" } },
-    dap:    { name: "DAP",    bag: 50, role: { en: "Phosphorus + some nitrogen (18-46-0)", ta: "பாஸ்பரஸ் + சிறிது நைட்ரஜன் (18-46-0)" } },
-    ssp:    { name: "SSP",    bag: 50, role: { en: "Phosphorus + sulphur (16% P₂O₅)", ta: "பாஸ்பரஸ் + கந்தகம் (16% P₂O₅)" } },
-    mop:    { name: "MOP",    bag: 50, role: { en: "Potassium (60% K₂O)", ta: "பொட்டாசியம் (60% K₂O)" } },
-    gypsum: { name: "Gypsum", bag: 50, role: { en: "Calcium + sulphur", ta: "கால்சியம் + கந்தகம்" } },
-  };
-
-  /* ---------------- Soil advice, alternatives, insights ---------------- */
-
-  const SOIL_ADVICE = {
-    loamy: [
-      { en: "Loam holds water and nutrients well — the standard split schedule works.", ta: "வண்டல் மண் நீரையும் ஊட்டச்சத்தையும் நன்கு தக்கவைக்கும் — வழக்கமான பிரித்து இடும் அட்டவணை பொருந்தும்." },
-      { en: "Add FYM or compost every season to keep the soil crumbly and full of life.", ta: "மண் பொலபொலப்பாகவும் உயிர்ப்புடனும் இருக்க ஒவ்வொரு பருவமும் தொழுவுரம் அல்லது உரக்குவியல் இடவும்." },
-    ],
-    clay: [
-      { en: "Clay drains slowly — avoid waterlogging after top dressing to prevent nitrogen loss.", ta: "களிமண்ணில் நீர் மெதுவாக வடியும் — மேல் உரமிட்ட பின் நீர் தேங்காமல் பார்த்தால் நைட்ரஜன் இழப்பைத் தடுக்கலாம்." },
-      { en: "Add gypsum and organic matter to improve structure and aeration.", ta: "மண் அமைப்பையும் காற்றோட்டத்தையும் மேம்படுத்த ஜிப்சம் மற்றும் கரிமப் பொருள் சேர்க்கவும்." },
-      { en: "Top dress when the soil is workable, not sticky.", ta: "மண் ஒட்டாமல் கையாள ஏற்ற பதத்தில் இருக்கும் போது மேல் உரமிடவும்." },
-    ],
-    sandy: [
-      { en: "Sandy soil leaches nutrients fast — split nitrogen into 3–4 smaller doses.", ta: "மணல் மண்ணில் ஊட்டச்சத்து விரைவாக வடிந்துவிடும் — நைட்ரஜனை 3–4 சிறிய அளவுகளாகப் பிரித்து இடவும்." },
-      { en: "Add extra FYM or vermicompost to hold water and nutrients (the plan already raises the manure quantity).", ta: "நீரையும் ஊட்டச்சத்தையும் தக்கவைக்க கூடுதல் தொழுவுரம் அல்லது மண்புழு உரம் இடவும் (திட்டத்தில் தொழுவுர அளவு ஏற்கனவே உயர்த்தப்பட்டுள்ளது)." },
-      { en: "Irrigate lightly after fertilizing; heavy watering washes nutrients below the roots.", ta: "உரமிட்ட பின் லேசாக நீர் பாய்ச்சவும்; அதிக நீர் ஊட்டச்சத்தை வேருக்குக் கீழே கழுவிவிடும்." },
-      { en: "Zinc and sulphur deficiency are common — consider zinc sulphate.", ta: "துத்தநாகம் மற்றும் கந்தகக் குறைபாடு பொதுவானது — துத்தநாக சல்பேட் இடுவதைக் கருத்தில் கொள்ளவும்." },
-    ],
-    red: [
-      { en: "Red soils are usually low in nitrogen, phosphorus and organic matter — never skip FYM.", ta: "சிவப்பு மண்ணில் நைட்ரஜன், பாஸ்பரஸ் மற்றும் கரிமப் பொருள் பொதுவாகக் குறைவு — தொழுவுரத்தைத் தவிர்க்க வேண்டாம்." },
-      { en: "Test the pH; if it is below 6, apply lime as per the soil-test requirement.", ta: "pH ஐ சோதிக்கவும்; 6 க்குக் கீழ் இருந்தால் மண் பரிசோதனை பரிந்துரைப்படி சுண்ணாம்பு இடவும்." },
-      { en: "Place phosphorus close to the root zone, as red soils bind it quickly.", ta: "சிவப்பு மண் பாஸ்பரஸை விரைவாகப் பிடித்துக்கொள்ளும் என்பதால் அதை வேர் பகுதிக்கு அருகில் இடவும்." },
-    ],
-    black: [
-      { en: "Black soil holds moisture well but cracks when dry — fertilize when moisture is adequate.", ta: "கரிசல் மண் ஈரத்தை நன்கு தேக்கும், ஆனால் காய்ந்தால் வெடிக்கும் — போதிய ஈரம் இருக்கும் போது உரமிடவும்." },
-      { en: "It is generally rich in potash and calcium, so potash needs are often lower — follow your soil test.", ta: "இதில் பொட்டாஷ் மற்றும் கால்சியம் பொதுவாக அதிகம் இருப்பதால் பொட்டாஷ் தேவை குறைவாக இருக்கலாம் — மண் பரிசோதனையைப் பின்பற்றவும்." },
-      { en: "Zinc and iron deficiency can appear — watch for yellowing of young leaves.", ta: "துத்தநாகம் மற்றும் இரும்புக் குறைபாடு தோன்றலாம் — இளம் இலைகள் மஞ்சளாவதைக் கவனிக்கவும்." },
-    ],
-  };
-
-  /* ---------- Group-level care, schedules, extra crops & soils ---------- */
-
-  const GROUP_CARE = {
-    cereal: {
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, mixed with FYM and applied before sowing or transplanting.", ta: "அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 2 கிலோ, தொழுவுரத்துடன் கலந்து விதைப்பு அல்லது நடவுக்கு முன் இடவும்." },
-      organic: { en: "Neem cake about 100 kg/acre with the basal dose, or a green manure crop ploughed in before sowing.", ta: "அடி உரத்துடன் ஏக்கருக்கு சுமார் 100 கிலோ வேப்பம் புண்ணாக்கு, அல்லது பசுந்தாள் உரப் பயிரை விதைப்பிற்கு முன் மடக்கி உழவும்." },
-      micro: { en: "Zinc sulphate 10 kg/acre as a basal dose in deficient fields. Spray 0.5% ferrous sulphate if young leaves turn pale.", ta: "குறைபாடுள்ள வயலில் துத்தநாக சல்பேட் ஏக்கருக்கு 10 கிலோ அடி உரமாக இடவும். இளம் இலைகள் வெளிறினால் 0.5% இரும்பு சல்பேட் தெளிக்கவும்." },
-      caution: { en: "Top dress only on moist soil and irrigate lightly afterwards, otherwise nitrogen is lost.", ta: "ஈரமான மண்ணில் மட்டுமே மேல் உரமிட்டு, பின் லேசாக நீர் பாய்ச்சவும்; இல்லையெனில் நைட்ரஜன் வீணாகும்." },
-    },
-    pulse: {
-      bio: { en: "Seed treatment with Rhizobium + PSB as per the packet fixes nitrogen and unlocks soil phosphorus.", ta: "பாக்கெட் அளவின்படி ரைசோபியம் + PSB கொண்டு விதை நேர்த்தி செய்தால் நைட்ரஜன் சேகரிக்கப்பட்டு பாஸ்பரஸ் விடுவிக்கப்படும்." },
-      organic: { en: "Well-decomposed FYM about 2 tonnes/acre with Trichoderma before sowing reduces wilt and root rot.", ta: "விதைப்பிற்கு முன் நன்கு மக்கிய தொழுவுரம் ஏக்கருக்கு சுமார் 2 டன், டிரைக்கோடெர்மாவுடன் இட்டால் வாடல் மற்றும் வேர் அழுகல் குறையும்." },
-      micro: { en: "Spray 2% DAP at flowering and again 15 days later to improve pod set. Gypsum helps on sulphur-poor soils.", ta: "பூக்கும் நிலையிலும் 15 நாட்கள் கழித்தும் 2% DAP தெளித்தால் காய் பிடிப்பு கூடும். கந்தகம் குறைந்த மண்ணில் ஜிப்சம் உதவும்." },
-      caution: { en: "Do not apply heavy nitrogen — pulses fix their own; excess only causes leafy growth.", ta: "அதிக நைட்ரஜன் வேண்டாம் — பயறு வகைகள் தாமே நைட்ரஜனைச் சேகரிக்கும்; அதிகமானால் இலை வளர்ச்சி மட்டுமே கூடும்." },
-    },
-    oilseed: {
-      bio: { en: "Azospirillum or Rhizobium + PSB, 2 kg/acre each, with FYM or as seed treatment before sowing.", ta: "அசோஸ்பைரில்லம் அல்லது ரைசோபியம் + PSB ஏக்கருக்கு தலா 2 கிலோ, தொழுவுரத்துடன் அல்லது விதை நேர்த்தியாக இடவும்." },
-      organic: { en: "Neem cake about 100 kg/acre at sowing gives slow-release nitrogen and checks soil pests.", ta: "விதைப்பின் போது ஏக்கருக்கு சுமார் 100 கிலோ வேப்பம் புண்ணாக்கு இட்டால் நைட்ரஜன் மெதுவாக கிடைக்கும், மண் பூச்சிகளும் கட்டுப்படும்." },
-      micro: { en: "Sulphur is critical — prefer SSP or gypsum. Spray 0.5% ferrous sulphate or borax if deficiency shows.", ta: "கந்தகம் மிக முக்கியம் — SSP அல்லது ஜிப்சம் தேர்ந்தெடுக்கவும். குறைபாடு தெரிந்தால் 0.5% இரும்பு சல்பேட் அல்லது போராக்ஸ் தெளிக்கவும்." },
-      caution: { en: "Place fertilizer about 5 cm to the side of the seed line; direct contact reduces germination.", ta: "உரத்தை விதை வரிசையிலிருந்து சுமார் 5 செ.மீ. தள்ளி இடவும்; நேரடித் தொடர்பு முளைப்புத் திறனைக் குறைக்கும்." },
-    },
-    vegetable: {
-      bio: { en: "Azospirillum + PSB, 2 kg/acre each, with FYM at bed preparation; Trichoderma protects against damping-off.", ta: "பாத்தி தயாரிக்கும் போது அசோஸ்பைரில்லம் + PSB ஏக்கருக்கு தலா 2 கிலோ தொழுவுரத்துடன் இடவும்; டிரைக்கோடெர்மா நாற்றழுகலைத் தடுக்கும்." },
-      organic: { en: "8–10 tonnes/acre of well-rotted FYM at land preparation, plus vermicompost in the planting pits.", ta: "நில தயாரிப்பின் போது ஏக்கருக்கு 8–10 டன் நன்கு மக்கிய தொழுவுரம், மேலும் நடவுக் குழிகளில் மண்புழு உரம் இடவும்." },
-      micro: { en: "Spray 1% 19:19:19 or a micronutrient mixture at flowering and fruit-set. Borax 2 kg/acre prevents fruit cracking.", ta: "பூக்கும் மற்றும் காய் பிடிக்கும் நிலையில் 1% 19:19:19 அல்லது நுண்ணூட்டக் கலவை தெளிக்கவும். போராக்ஸ் ஏக்கருக்கு 2 கிலோ காய் வெடிப்பைத் தடுக்கும்." },
-      caution: { en: "Split nitrogen into small doses every 2–3 weeks; one heavy dose burns roots and causes flower drop.", ta: "நைட்ரஜனை 2–3 வாரங்களுக்கு ஒருமுறை சிறிய அளவுகளாகப் பிரித்து இடவும்; ஒரே பெரிய அளவு வேரைக் கருக்கி பூ உதிர்வை ஏற்படுத்தும்." },
-    },
-    fruit: {
-      bio: { en: "Azotobacter or Azospirillum + PSB + VAM, applied in the basin along with FYM once a year.", ta: "அசோட்டோபாக்டர் அல்லது அசோஸ்பைரில்லம் + PSB + VAM ஆகியவற்றை வருடம் ஒருமுறை தொழுவுரத்துடன் பாத்தியில் இடவும்." },
-      organic: { en: "Apply 10–20 kg FYM or compost per tree per year in the basin, at the start of the rains.", ta: "மழைக்காலத் தொடக்கத்தில் ஒரு மரத்திற்கு வருடம் 10–20 கிலோ தொழுவுரம் அல்லது உரக்குவியலை பாத்தியில் இடவும்." },
-      micro: { en: "Spray a zinc–boron–iron micronutrient mixture twice a year: before flowering and after fruit set.", ta: "வருடம் இருமுறை — பூக்கும் முன்பும் காய் பிடித்த பின்பும் — துத்தநாகம், போரான், இரும்பு கொண்ட நுண்ணூட்டக் கலவையைத் தெளிக்கவும்." },
-      caution: { en: "Apply fertilizer in the basin at the edge of the canopy, not near the trunk, and irrigate after applying.", ta: "உரத்தை அடிமரத்திற்கு அருகில் அல்லாமல் கிளைப் பரப்பின் ஓரப் பாத்தியில் இட்டு, பின் நீர் பாய்ச்சவும்." },
-    },
-    spice: {
-      bio: { en: "PSB + Azospirillum with FYM at planting; Trichoderma in the bed prevents rhizome and root rot.", ta: "நடவின் போது PSB + அசோஸ்பைரில்லம் தொழுவுரத்துடன் இடவும்; பாத்தியில் டிரைக்கோடெர்மா கிழங்கு மற்றும் வேர் அழுகலைத் தடுக்கும்." },
-      organic: { en: "About 10 tonnes/acre FYM plus green-leaf mulching keeps beds cool and feeds the crop slowly.", ta: "ஏக்கருக்கு சுமார் 10 டன் தொழுவுரம் மற்றும் பசுந்தாள் மூடாக்கு பாத்திகளைக் குளிர்ச்சியாக வைத்து மெதுவாக ஊட்டமளிக்கும்." },
-      micro: { en: "Zinc sulphate 10 kg/acre and a 1% magnesium sulphate spray correct the common deficiencies.", ta: "துத்தநாக சல்பேட் ஏக்கருக்கு 10 கிலோ மற்றும் 1% மெக்னீசியம் சல்பேட் தெளிப்பு பொதுவான குறைபாடுகளைச் சரிசெய்யும்." },
-      caution: { en: "Earth up after every top dressing and avoid waterlogging — rhizome rot spreads fast in wet beds.", ta: "ஒவ்வொரு மேல் உரத்திற்குப் பின்னும் மண் அணைக்கவும்; நீர் தேங்காமல் பார்க்கவும் — ஈரப் பாத்தியில் கிழங்கு அழுகல் வேகமாகப் பரவும்." },
-    },
-    plantation: {
-      bio: { en: "Azotobacter + PSB with FYM in the basin once a year improves nutrient uptake.", ta: "வருடம் ஒருமுறை அசோட்டோபாக்டர் + PSB ஐ தொழுவுரத்துடன் பாத்தியில் இட்டால் ஊட்டச்சத்து உறிஞ்சுதல் மேம்படும்." },
-      organic: { en: "Apply 10–25 kg FYM or compost per plant per year and mulch the basin with dry leaves.", ta: "ஒரு செடிக்கு வருடம் 10–25 கிலோ தொழுவுரம் அல்லது உரக்குவியல் இட்டு, பாத்தியை உலர்ந்த இலைகளால் மூடவும்." },
-      micro: { en: "Magnesium sulphate and borax correct yellowing and poor nut or berry set; spray as per symptoms.", ta: "மெக்னீசியம் சல்பேட் மற்றும் போராக்ஸ் இலை மஞ்சளாதல், காய் பிடிப்பு குறைவு ஆகியவற்றைச் சரிசெய்யும்; அறிகுறிக்கேற்ப தெளிக்கவும்." },
-      caution: { en: "Split the yearly dose into 2–3 applications timed with the rains; never apply to dry soil.", ta: "வருட அளவை மழையுடன் இணைத்து 2–3 முறையாகப் பிரித்து இடவும்; உலர்ந்த மண்ணில் ஒருபோதும் இட வேண்டாம்." },
-    },
-  };
-
-  const GROUP_SCHEDULE = {
-    cereal: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 1 / 3, p: 1, k: 1 }, detailEn: "Full phosphorus and potash + one-third nitrogen.", detailTa: "முழு பாஸ்பரஸ் மற்றும் பொட்டாஷ் + மூன்றில் ஒரு பங்கு நைட்ரஜன்." },
-      { en: "Active growth (25–30 days)", ta: "வளர்ச்சி நிலை (25–30 நாட்கள்)", f: { n: 1 / 3, p: 0, k: 0 }, detailEn: "One-third nitrogen as top dressing on moist soil.", detailTa: "ஈரமான மண்ணில் மூன்றில் ஒரு பங்கு நைட்ரஜனை மேல் உரமாக இடவும்." },
-      { en: "Flowering / grain formation", ta: "பூக்கும் / தானிய நிலை", f: { n: 1 / 3, p: 0, k: 0 }, detailEn: "Remaining nitrogen as the final top dressing.", detailTa: "மீதமுள்ள நைட்ரஜனை இறுதி மேல் உரமாக இடவும்." },
-    ],
-    pulse: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 1, p: 1, k: 1 }, detailEn: "Apply the whole dose as basal, placed below the seed line.", detailTa: "முழு அளவையும் அடி உரமாக, விதை வரிசைக்குக் கீழ் இடவும்." },
-      { en: "Flowering (30–35 days)", ta: "பூக்கும் நிலை (30–35 நாட்கள்)", f: { n: 0, p: 0, k: 0 }, detailEn: "No soil fertilizer — spray 2% DAP to improve pod set.", detailTa: "மண்ணில் உரம் தேவையில்லை — காய் பிடிப்புக்கு 2% DAP தெளிக்கவும்." },
-    ],
-    oilseed: [
-      { en: "Basal (at sowing)", ta: "அடிப்படை (விதைப்பின் போது)", f: { n: 0.5, p: 1, k: 1 }, detailEn: "Full phosphorus and potash + half nitrogen.", detailTa: "முழு பாஸ்பரஸ் மற்றும் பொட்டாஷ் + பாதி நைட்ரஜன்." },
-      { en: "Flowering (30–40 days)", ta: "பூக்கும் நிலை (30–40 நாட்கள்)", f: { n: 0.5, p: 0, k: 0 }, detailEn: "Remaining nitrogen; spray boron if flower drop is seen.", detailTa: "மீதமுள்ள நைட்ரஜன்; பூ உதிர்வு தெரிந்தால் போரான் தெளிக்கவும்." },
-    ],
-    vegetable: [
-      { en: "Basal (at planting)", ta: "அடிப்படை (நடவின் போது)", f: { n: 1 / 3, p: 1, k: 0.5 }, detailEn: "Full phosphorus + half potash + one-third nitrogen, mixed into the bed.", detailTa: "முழு பாஸ்பரஸ் + பாதி பொட்டாஷ் + மூன்றில் ஒரு பங்கு நைட்ரஜனை பாத்தியில் கலக்கவும்." },
-      { en: "30 days after planting", ta: "நடவுக்குப் பின் 30 நாட்கள்", f: { n: 1 / 3, p: 0, k: 0.25 }, detailEn: "One-third nitrogen with a quarter of the potash, then earth up.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜனுடன் கால் பங்கு பொட்டாஷ் இட்டு மண் அணைக்கவும்." },
-      { en: "Flowering & fruiting", ta: "பூக்கும் & காய்க்கும் நிலை", f: { n: 1 / 3, p: 0, k: 0.25 }, detailEn: "Remaining nitrogen and potash; spray 1% 19:19:19 for better fruit set.", detailTa: "மீதமுள்ள நைட்ரஜன் மற்றும் பொட்டாஷ்; நல்ல காய் பிடிப்புக்கு 1% 19:19:19 தெளிக்கவும்." },
-    ],
-    fruit: [
-      { en: "First dose (start of rains)", ta: "முதல் அளவு (மழைத் தொடக்கம்)", f: { n: 0.5, p: 1, k: 0.5 }, detailEn: "Full phosphorus + half nitrogen and potash in the basin with FYM.", detailTa: "முழு பாஸ்பரஸ் + பாதி நைட்ரஜன், பொட்டாஷ் ஆகியவற்றை தொழுவுரத்துடன் பாத்தியில் இடவும்." },
-      { en: "Second dose (after fruit set)", ta: "இரண்டாம் அளவு (காய் பிடித்த பின்)", f: { n: 0.5, p: 0, k: 0.5 }, detailEn: "Remaining nitrogen and potash; irrigate right after applying.", detailTa: "மீதமுள்ள நைட்ரஜன் மற்றும் பொட்டாஷ்; இட்ட உடனே நீர் பாய்ச்சவும்." },
-    ],
-    spice: [
-      { en: "Basal (at planting)", ta: "அடிப்படை (நடவின் போது)", f: { n: 1 / 3, p: 1, k: 1 / 3 }, detailEn: "Full phosphorus + one-third nitrogen and potash, then mulch.", detailTa: "முழு பாஸ்பரஸ் + மூன்றில் ஒரு பங்கு நைட்ரஜன், பொட்டாஷ் இட்டு மூடாக்கு போடவும்." },
-      { en: "45 days after planting", ta: "நடவுக்குப் பின் 45 நாட்கள்", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "One-third nitrogen and potash, followed by earthing up.", detailTa: "மூன்றில் ஒரு பங்கு நைட்ரஜன், பொட்டாஷ் இட்டு மண் அணைக்கவும்." },
-      { en: "90 days after planting", ta: "நடவுக்குப் பின் 90 நாட்கள்", f: { n: 1 / 3, p: 0, k: 1 / 3 }, detailEn: "Remaining nitrogen and potash with the final earthing up.", detailTa: "மீதமுள்ள நைட்ரஜன், பொட்டாஷ் இட்டு இறுதியாக மண் அணைக்கவும்." },
-    ],
-    plantation: [
-      { en: "First dose (early rains)", ta: "முதல் அளவு (முன் மழை)", f: { n: 0.5, p: 1, k: 0.5 }, detailEn: "Full phosphorus + half nitrogen and potash in the basin.", detailTa: "முழு பாஸ்பரஸ் + பாதி நைட்ரஜன், பொட்டாஷ் ஆகியவற்றை பாத்தியில் இடவும்." },
-      { en: "Second dose (late rains)", ta: "இரண்டாம் அளவு (பின் மழை)", f: { n: 0.5, p: 0, k: 0.5 }, detailEn: "Remaining nitrogen and potash; cover with soil or mulch.", detailTa: "மீதமுள்ள நைட்ரஜன் மற்றும் பொட்டாஷ்; மண் அல்லது மூடாக்கால் மூடவும்." },
-    ],
-  };
-
-  /* [v, N, P2O5, K2O, phosphorus source, FYM tonnes, group] — per acre at medium status */
-  const MORE_CROPS = [
-    ["sorghum", 36, 18, 12, "dap", 4, "cereal"],
-    ["pearlmillet", 32, 16, 16, "dap", 4, "cereal"],
-    ["fingermillet", 24, 12, 10, "dap", 5, "cereal"],
-    ["foxtailmillet", 16, 8, 8, "dap", 3, "cereal"],
-    ["barnyardmillet", 16, 8, 8, "dap", 3, "cereal"],
-    ["blackgram", 10, 16, 10, "ssp", 2, "pulse"],
-    ["greengram", 10, 16, 10, "ssp", 2, "pulse"],
-    ["redgram", 10, 20, 16, "ssp", 3, "pulse"],
-    ["bengalgram", 10, 16, 8, "ssp", 2, "pulse"],
-    ["cowpea", 10, 16, 10, "ssp", 2, "pulse"],
-    ["horsegram", 8, 12, 8, "ssp", 2, "pulse"],
-    ["sesame", 14, 9, 9, "ssp", 5, "oilseed"],
-    ["sunflower", 24, 36, 24, "dap", 5, "oilseed"],
-    ["castor", 18, 9, 9, "ssp", 5, "oilseed"],
-    ["soybean", 8, 32, 16, "ssp", 5, "oilseed"],
-    ["mustard", 24, 16, 16, "ssp", 5, "oilseed"],
-    ["tomato", 40, 40, 40, "dap", 10, "vegetable"],
-    ["brinjal", 40, 20, 12, "dap", 10, "vegetable"],
-    ["chilli", 24, 32, 24, "dap", 10, "vegetable"],
-    ["okra", 16, 20, 12, "dap", 8, "vegetable"],
-    ["onion", 24, 24, 12, "dap", 10, "vegetable"],
-    ["potato", 60, 40, 40, "dap", 10, "vegetable"],
-    ["cabbage", 48, 32, 32, "dap", 10, "vegetable"],
-    ["cauliflower", 48, 32, 32, "dap", 10, "vegetable"],
-    ["cucumber", 16, 12, 12, "dap", 8, "vegetable"],
-    ["bittergourd", 16, 12, 12, "dap", 8, "vegetable"],
-    ["drumstick", 20, 20, 20, "dap", 8, "vegetable"],
-    ["tapioca", 36, 36, 52, "dap", 5, "vegetable"],
-    ["sweetpotato", 20, 10, 30, "dap", 5, "vegetable"],
-    ["carrot", 20, 16, 20, "dap", 8, "vegetable"],
-    ["beans", 12, 20, 12, "dap", 8, "vegetable"],
-    ["banana", 80, 30, 100, "dap", 10, "fruit"],
-    ["mango", 20, 20, 20, "dap", 10, "fruit"],
-    ["coconut", 20, 12, 40, "dap", 10, "fruit"],
-    ["papaya", 40, 40, 40, "dap", 10, "fruit"],
-    ["guava", 24, 24, 24, "dap", 10, "fruit"],
-    ["grapes", 40, 40, 40, "dap", 10, "fruit"],
-    ["lemon", 24, 12, 24, "dap", 10, "fruit"],
-    ["pomegranate", 25, 12, 25, "dap", 10, "fruit"],
-    ["sapota", 16, 16, 16, "dap", 10, "fruit"],
-    ["pineapple", 48, 16, 48, "dap", 8, "fruit"],
-    ["turmeric", 50, 25, 45, "dap", 10, "spice"],
-    ["ginger", 30, 20, 30, "dap", 10, "spice"],
-    ["garlic", 30, 24, 20, "dap", 8, "spice"],
-    ["coriander", 12, 16, 8, "dap", 5, "spice"],
-    ["blackpepper", 20, 16, 28, "dap", 6, "spice"],
-    ["cardamom", 30, 24, 40, "dap", 6, "spice"],
-    ["tea", 40, 10, 20, "dap", 4, "plantation"],
-    ["coffee", 32, 24, 32, "dap", 6, "plantation"],
-    ["cashew", 20, 10, 10, "dap", 5, "plantation"],
-    ["arecanut", 40, 16, 50, "dap", 6, "plantation"],
-    ["rubber", 12, 12, 12, "dap", 5, "plantation"],
-  ];
-
-  MORE_CROPS.forEach(([v, n, p, k, pSrc, fym, grp]) => {
-    const care = GROUP_CARE[grp];
-    CROP_PLAN[v] = { n: n, p: p, k: k, pSrc: pSrc, fym: fym, bio: care.bio, organic: care.organic, micro: care.micro, caution: care.caution };
-    SCHEDULE[v] = GROUP_SCHEDULE[grp];
-  });
-
-  Object.assign(SOIL_ADVICE, {
-    alluvial: [
-      { en: "Alluvial soil is naturally fertile and holds nutrients well — the standard split schedule works.", ta: "ஆற்று வண்டல் மண் இயற்கையிலேயே வளமானது, ஊட்டச்சத்தை நன்கு தக்கவைக்கும் — வழக்கமான பிரித்து இடும் அட்டவணை பொருந்தும்." },
-      { en: "Keep adding organic matter each season; continuous cropping drains it faster than it looks.", ta: "ஒவ்வொரு பருவமும் கரிமப் பொருள் சேர்க்கவும்; தொடர் பயிர்ச்செய்கை அதைத் தெரியாமலேயே வேகமாகக் குறைக்கும்." },
-    ],
-    laterite: [
-      { en: "Laterite soil is acidic and low in phosphorus — apply lime as per the soil test and place phosphorus near the roots.", ta: "லேட்டரைட் மண் அமிலத் தன்மையுடன் பாஸ்பரஸ் குறைவாக இருக்கும் — மண் பரிசோதனைப்படி சுண்ணாம்பு இட்டு, பாஸ்பரஸை வேருக்கு அருகில் இடவும்." },
-      { en: "Heavy FYM, mulching and split nitrogen doses reduce nutrient loss from these soils.", ta: "அதிக தொழுவுரம், மூடாக்கு மற்றும் பிரித்து இடும் நைட்ரஜன் இந்த மண்ணில் ஊட்டச்சத்து இழப்பைக் குறைக்கும்." },
-    ],
-    silty: [
-      { en: "Silty soil holds moisture well but crusts and compacts — add organic matter and avoid working it when wet.", ta: "சேற்று மண் ஈரத்தை நன்கு தேக்கும், ஆனால் இறுகிவிடும் — கரிமப் பொருள் சேர்க்கவும், ஈரமாக இருக்கும் போது உழுவதைத் தவிர்க்கவும்." },
-      { en: "Ensure good drainage before top dressing so nitrogen does not sit in waterlogged patches.", ta: "மேல் உரமிடும் முன் நல்ல வடிகால் உறுதி செய்யவும்; இல்லையெனில் நீர் தேங்கிய இடங்களில் நைட்ரஜன் வீணாகும்." },
-    ],
-    sandyloam: [
-      { en: "Sandy loam drains fast but holds enough nutrients — split nitrogen into 3 doses for best results.", ta: "மணல் கலந்த வண்டல் மண் விரைவாக வடியும், ஆனால் போதுமான ஊட்டச்சத்தைத் தக்கவைக்கும் — நைட்ரஜனை 3 அளவுகளாகப் பிரிப்பது சிறந்தது." },
-      { en: "This is an ideal soil for most crops; maintain it with regular compost or vermicompost.", ta: "பெரும்பாலான பயிர்களுக்கு ஏற்ற மண் இது; வழக்கமான உரக்குவியல் அல்லது மண்புழு உரத்தால் பராமரிக்கவும்." },
-    ],
-    saline: [
-      { en: "Saline soil harms germination — leach the salts with good-quality water and provide proper drainage first.", ta: "உவர் மண் முளைப்பைப் பாதிக்கும் — முதலில் நல்ல தரமான நீரால் உப்பை கழுவி, சரியான வடிகால் அமைக்கவும்." },
-      { en: "Use gypsum, extra FYM and salt-tolerant varieties; avoid chloride-based fertilizers such as MOP.", ta: "ஜிப்சம், கூடுதல் தொழுவுரம் மற்றும் உப்புத் தாங்கும் ரகங்களைப் பயன்படுத்தவும்; MOP போன்ற குளோரைடு உரங்களைத் தவிர்க்கவும்." },
-    ],
-    alkaline: [
-      { en: "Alkaline or sodic soil locks up iron and zinc — apply gypsum and organic matter to reclaim it.", ta: "கார மண்ணில் இரும்பும் துத்தநாகமும் பயிருக்குக் கிடைக்காது — ஜிப்சம் மற்றும் கரிமப் பொருள் இட்டு சீரமைக்கவும்." },
-      { en: "Prefer ammonium sulphate over urea, and correct yellowing with foliar sprays of iron and zinc.", ta: "யூரியாவை விட அம்மோனியம் சல்பேட் சிறந்தது; இலை மஞ்சளாதலை இரும்பு, துத்தநாக இலைவழி தெளிப்பால் சரிசெய்யவும்." },
-    ],
-    acidic: [
-      { en: "Acidic soil needs lime as per the soil test, applied 2–3 weeks before sowing.", ta: "அமில மண்ணுக்கு மண் பரிசோதனைப்படி சுண்ணாம்பு தேவை; விதைப்பிற்கு 2–3 வாரங்கள் முன் இடவும்." },
-      { en: "Avoid acid-forming fertilizers like ammonium sulphate; phosphorus needs are usually higher here.", ta: "அம்மோனியம் சல்பேட் போன்ற அமிலமாக்கும் உரங்களைத் தவிர்க்கவும்; இங்கு பாஸ்பரஸ் தேவை பொதுவாக அதிகம்." },
-    ],
-    calcareous: [
-      { en: "Calcareous soil fixes phosphorus and iron — band-place phosphorus and use FYM to keep it available.", ta: "சுண்ணாம்பு மண் பாஸ்பரஸையும் இரும்பையும் பிடித்துக்கொள்ளும் — பாஸ்பரஸை வரிசையாக இட்டு, தொழுவுரத்தால் அது கிடைக்கச் செய்யவும்." },
-      { en: "Yellowing between the veins is common — spray 0.5% ferrous sulphate two or three times.", ta: "நரம்புகளுக்கிடையே மஞ்சளாதல் பொதுவானது — 0.5% இரும்பு சல்பேட்டை இரண்டு மூன்று முறை தெளிக்கவும்." },
-    ],
-    hill: [
-      { en: "Hill and forest soils are rich in organic matter but lose nutrients to runoff — grow along contours and mulch.", ta: "மலை மண்ணில் கரிமப் பொருள் அதிகம், ஆனால் நீரோட்டத்தால் ஊட்டச்சத்து இழக்கும் — சம வரிசையில் பயிரிட்டு மூடாக்கு போடவும்." },
-      { en: "Apply fertilizer in small split doses just before or after rain, never on steep bare slopes.", ta: "மழைக்கு சற்று முன் அல்லது பின் சிறிய அளவுகளாகப் பிரித்து இடவும்; செங்குத்தான வெற்றுச் சரிவுகளில் இட வேண்டாம்." },
-    ],
-  });
-
-  const ALTERNATIVES = [
-    { en: "No urea? Use ammonium sulphate (20.6% N). About 2.2 kg replaces 1 kg of urea and it also supplies sulphur.", ta: "யூரியா இல்லையா? அம்மோனியம் சல்பேட் (20.6% N) பயன்படுத்தவும். 1 கிலோ யூரியாவுக்குப் பதிலாக சுமார் 2.2 கிலோ போதும்; கந்தகமும் கிடைக்கும்." },
-    { en: "No DAP? Use SSP for phosphorus with a little extra urea for nitrogen, or a complex fertilizer such as 17-17-17 or 20-20-0-13.", ta: "DAP இல்லையா? பாஸ்பரஸுக்கு SSP மற்றும் நைட்ரஜனுக்கு சிறிது கூடுதல் யூரியா, அல்லது 17-17-17 / 20-20-0-13 போன்ற கூட்டு உரம் பயன்படுத்தவும்." },
-    { en: "No MOP? Use potassium sulphate (SOP) for chloride-sensitive crops, or potassium nitrate through drip irrigation.", ta: "MOP இல்லையா? குளோரைடுக்கு உணர்திறன் உள்ள பயிர்களுக்கு பொட்டாசியம் சல்பேட் (SOP), அல்லது சொட்டு நீர் வழியாக பொட்டாசியம் நைட்ரேட் பயன்படுத்தவும்." },
-    { en: "Using drip irrigation? 19:19:19 water-soluble fertilizer can be applied in small, frequent doses.", ta: "சொட்டு நீர்ப்பாசனம் உள்ளதா? 19:19:19 நீரில் கரையும் உரத்தை சிறிய, அடிக்கடி அளவுகளில் இடலாம்." },
-  ];
-
-  const INSIGHTS = {
-    n: {
-      low: { en: "Nitrogen is low — expect pale, slow growth. The dose is raised by 25% and should be applied in splits.", ta: "நைட்ரஜன் குறைவு — வெளிர், மெதுவான வளர்ச்சி தெரியும். அளவு 25% உயர்த்தப்பட்டுள்ளது; பிரித்து இடவும்." },
-      medium: { en: "Nitrogen is adequate — follow the standard dose.", ta: "நைட்ரஜன் போதுமான அளவில் உள்ளது — வழக்கமான அளவைப் பின்பற்றவும்." },
-      high: { en: "Nitrogen is high — the dose is cut by half. Excess causes lodging and more pests.", ta: "நைட்ரஜன் அதிகம் — அளவு பாதியாகக் குறைக்கப்பட்டுள்ளது. அதிகமானால் பயிர் சாய்ந்து பூச்சித் தாக்குதல் கூடும்." },
-    },
-    p: {
-      low: { en: "Phosphorus is low — roots and tillering will suffer. The dose is raised by 25%; apply it all as basal.", ta: "பாஸ்பரஸ் குறைவு — வேர் மற்றும் தூர் வளர்ச்சி பாதிக்கும். அளவு 25% உயர்த்தப்பட்டுள்ளது; முழுவதையும் அடி உரமாக இடவும்." },
-      medium: { en: "Phosphorus is adequate — the standard basal dose is enough.", ta: "பாஸ்பரஸ் போதுமான அளவில் உள்ளது — வழக்கமான அடி உர அளவு போதும்." },
-      high: { en: "Phosphorus is high — the dose is cut by half. Too much can lock up zinc.", ta: "பாஸ்பரஸ் அதிகம் — அளவு பாதியாகக் குறைக்கப்பட்டுள்ளது. மிகுந்தால் துத்தநாகம் பயிருக்குக் கிடைக்காமல் போகும்." },
-    },
-    k: {
-      low: { en: "Potassium is low — expect weak stems and poor grain or fibre quality. The dose is raised by 25%.", ta: "பொட்டாசியம் குறைவு — தண்டு வலுவின்றி தானிய அல்லது நார் தரம் குறையும். அளவு 25% உயர்த்தப்பட்டுள்ளது." },
-      medium: { en: "Potassium is adequate — follow the standard dose.", ta: "பொட்டாசியம் போதுமான அளவில் உள்ளது — வழக்கமான அளவைப் பின்பற்றவும்." },
-      high: { en: "Potassium is high — the dose is cut by half.", ta: "பொட்டாசியம் அதிகம் — அளவு பாதியாகக் குறைக்கப்பட்டுள்ளது." },
-    },
-  };
-
-  /* ---------------- Irrigation, warnings, tips, guide, safety ---------------- */
-
-  const IRRIGATION_TIPS = [
-    { en: "Apply water-soluble fertilizers through drip irrigation for even nutrient delivery.", ta: "சமமான ஊட்டச்சத்து வழங்கலுக்கு நீரில் கரையும் உரங்களை சொட்டு நீர்ப்பாசனம் மூலம் இடவும்." },
-    { en: "Never apply fertilizer to dry soil right before heavy rain — nutrients wash away.", ta: "கனமழைக்கு முன் உலர்ந்த மண்ணில் உரம் இட வேண்டாம் — ஊட்டச்சத்துகள் வீணாகும்." },
-    { en: "Irrigate lightly a day before top dressing so roots can absorb nutrients better.", ta: "மேல் உரமிடும் முன் ஒரு நாள் லேசாக நீர் பாய்ச்சவும், இதனால் வேர்கள் ஊட்டச்சத்தை நன்கு உறிஞ்சும்." },
-    { en: "Avoid over-irrigation after fertilizing sandy soil — nutrients leach quickly.", ta: "மணல் மண்ணில் உரமிட்ட பிறகு அதிக நீர் பாய்ச்ச வேண்டாம் — ஊட்டச்சத்துகள் விரைவாக வடிந்துவிடும்." },
-    { en: "Fertigation works best in short, frequent doses rather than one large dose.", ta: "ஒரே பெரிய அளவை விட, குறுகிய, அடிக்கடி நிகழும் சிறிய அளவுகளில் உரமிடுவது சிறந்தது." },
-    { en: "In rice, avoid draining the field for 2–3 days after top dressing.", ta: "நெல்லில் மேல் உரமிட்ட பின் 2–3 நாட்களுக்கு வயலில் நீரை வடிக்க வேண்டாம்." },
-    { en: "Sandy soils need lighter, more frequent watering; clay soils need less frequent, deeper watering.", ta: "மணல் மண்ணுக்கு லேசான, அடிக்கடி நீர்ப்பாசனம்; களிமண்ணுக்கு குறைந்த இடைவெளியில் ஆழமான நீர்ப்பாசனம் தேவை." },
-  ];
-
-  const WARNING_SIGNS = [
-    { en: "Pale yellow older leaves often signal nitrogen deficiency.", ta: "வெளிர் மஞ்சள் நிற பழைய இலைகள் பெரும்பாலும் நைட்ரஜன் குறைபாட்டைக் காட்டும்." },
-    { en: "Purplish leaf tinge, especially in young plants, can mean low phosphorus.", ta: "இளம் தாவரங்களில் ஊதா நிற இலைத் தோற்றம் குறைந்த பாஸ்பரஸைக் குறிக்கலாம்." },
-    { en: "Browning or scorching at leaf edges points to potassium deficiency.", ta: "இலை ஓரங்களில் பழுப்பு அல்லது கருகல் பொட்டாசியம் குறைபாட்டைக் காட்டும்." },
-    { en: "Excess nitrogen causes overly soft, dark green growth and delayed flowering.", ta: "அதிகப்படியான நைட்ரஜன் மென்மையான, அடர் பச்சை வளர்ச்சியையும் தாமதமான பூக்கவிழ்ப்பையும் ஏற்படுத்தும்." },
-    { en: "White crust on the soil surface can indicate salt build-up from over-fertilization.", ta: "மண் மேற்பரப்பில் வெள்ளை படலம் அதிகப்படியான உரத்தால் உப்பு தேங்குவதைக் காட்டலாம்." },
-    { en: "Yellow young leaves with green veins usually point to iron deficiency.", ta: "பச்சை நரம்புகளுடன் மஞ்சள் இளம் இலைகள் பொதுவாக இரும்புச் சத்து குறைபாட்டைக் காட்டும்." },
-    { en: "White stripes on young maize leaves, or rusty brown patches in rice, point to zinc deficiency.", ta: "சோள இளம் இலைகளில் வெள்ளைக் கோடுகள் அல்லது நெல்லில் துருப்பழுப்பு திட்டுகள் துத்தநாகக் குறைபாட்டைக் காட்டும்." },
-    { en: "Reddening of cotton leaves signals magnesium deficiency.", ta: "பருத்தி இலைகள் சிவப்பாவது மெக்னீசியம் குறைபாட்டின் அறிகுறி." },
-  ];
-
-  const KNOWLEDGE_TIPS = [
-    { en: "A soil test every season is the cheapest way to avoid wasting money on the wrong fertilizer.", ta: "ஒவ்வொரு பருவத்திலும் மண் பரிசோதனை செய்வது தவறான உரத்தில் பணத்தை வீணடிக்காமல் இருக்க மலிவான வழி." },
-    { en: "Mixing bio-fertilizers with chemical fertilizers on the same day can reduce the bacteria's effectiveness.", ta: "உயிர் உரங்களை இரசாயன உரங்களுடன் ஒரே நாளில் கலப்பது பாக்டீரியாவின் செயல்திறனைக் குறைக்கலாம்." },
-    { en: "Split doses of nitrogen are far more efficient than one large application.", ta: "நைட்ரஜனை பிரித்து இடுவது ஒரே பெரிய அளவை விட மிகவும் திறமையானது." },
-    { en: "Legume crops like groundnut and pulses need far less nitrogen fertilizer because they fix their own.", ta: "நிலக்கடலை மற்றும் பயறு போன்ற பயறு வகைப் பயிர்கள் தானாகவே நைட்ரஜனைச் சேகரிப்பதால் குறைவான நைட்ரஜன் உரம் தேவைப்படும்." },
-    { en: "Organic matter improves how well chemical fertilizers are retained and used by the soil.", ta: "கரிமப் பொருள் இரசாயன உரங்கள் மண்ணில் தக்கவைக்கப்பட்டு பயன்படுத்தப்படும் விதத்தை மேம்படுத்தும்." },
-    { en: "Applying fertilizer in the cool hours of early morning or evening reduces nutrient loss to heat.", ta: "காலை அல்லது மாலை குளிர்ந்த நேரங்களில் உரமிடுவது வெப்பத்தால் ஏற்படும் ஊட்டச்சத்து இழப்பைக் குறைக்கும்." },
-    { en: "Neem-coated urea releases nitrogen more slowly and cuts losses — prefer it over plain urea.", ta: "வேப்பம் பூசிய யூரியா நைட்ரஜனை மெதுவாக வெளியிட்டு இழப்பைக் குறைக்கும் — சாதாரண யூரியாவை விட இதைத் தேர்ந்தெடுக்கவும்." },
-    { en: "Mix fertilizers only just before applying — some blends absorb moisture and turn sticky in storage.", ta: "உரங்களை இடுவதற்கு சற்று முன்பு மட்டுமே கலக்கவும் — சில கலவைகள் சேமிப்பில் ஈரத்தை உறிஞ்சி ஒட்டிக்கொள்ளும்." },
-    { en: "Crop rotation with pulses reduces the nitrogen needed by the next cereal crop.", ta: "பயறு வகைகளுடன் பயிர்ச் சுழற்சி செய்தால் அடுத்த தானியப் பயிருக்குத் தேவையான நைட்ரஜன் குறையும்." },
-    { en: "Zinc deficiency is the most common micronutrient problem in rice; zinc sulphate every 2–3 crops prevents it.", ta: "நெல்லில் மிகவும் பொதுவான நுண்ணூட்டக் குறைபாடு துத்தநாகம்; 2–3 பயிருக்கு ஒருமுறை துத்தநாக சல்பேட் இட்டால் தடுக்கலாம்." },
-    { en: "Most crops prefer soil pH between 6.0 and 7.5; nutrient availability drops outside this range.", ta: "பெரும்பாலான பயிர்கள் 6.0 முதல் 7.5 வரை pH உள்ள மண்ணை விரும்பும்; இந்த வரம்புக்கு வெளியே ஊட்டச்சத்து கிடைப்பது குறையும்." },
-    { en: "Foliar sprays correct deficiencies quickly, but they supplement soil application — they do not replace it.", ta: "இலைவழி தெளிப்பு குறைபாடுகளை விரைவாகச் சரிசெய்யும்; ஆனால் அது மண்ணில் இடுவதற்கு துணையே, மாற்று அல்ல." },
-  ];
-  let tipIndex = 0;
-
-  const GUIDE = [
-    { en: "Test the soil before every season to know its real nutrient status.", ta: "ஒவ்வொரு பருவத்திற்கும் முன் மண்ணின் உண்மையான ஊட்டச்சத்து நிலையை அறிய மண் பரிசோதனை செய்யவும்." },
-    { en: "Apply the basal dose at sowing or transplanting, mixed into the soil.", ta: "விதைக்கும் அல்லது நடும் போது அடிப்படை உரத்தை மண்ணுடன் கலந்து இடவும்." },
-    { en: "Split the nitrogen dose across 2–3 top dressings during growth.", ta: "நைட்ரஜன் உரத்தை வளர்ச்சியின் போது 2–3 முறை பிரித்து மேல் உரமாக இடவும்." },
-    { en: "Water lightly after applying fertilizer so nutrients reach the root zone.", ta: "உரமிட்ட பிறகு லேசாக நீர் பாய்ச்சி ஊட்டச்சத்துகள் வேர் பகுதியை அடையச் செய்யவும்." },
-    { en: "Keep fertilizer away from direct contact with seeds to avoid damage.", ta: "விதைகளுக்கு நேரடியாக உரம் படாமல் பார்த்துக் கொள்ளவும்." },
-  ];
-
-  const SAFETY = [
-    { en: "Wear gloves and a mask while handling or spraying fertilizer.", ta: "உரத்தைக் கையாளும் அல்லது தெளிக்கும் போது கையுறை மற்றும் முகக்கவசம் அணியவும்." },
-    { en: "Store fertilizers in a dry, well-ventilated place, away from children and food items.", ta: "உரங்களை உலர்ந்த, காற்றோட்டமுள்ள இடத்தில், குழந்தைகள் மற்றும் உணவுப் பொருட்களிலிருந்து விலக்கி வைக்கவும்." },
-    { en: "Wash hands and face thoroughly after application.", ta: "உரமிட்ட பிறகு கை மற்றும் முகத்தை நன்கு கழுவவும்." },
-    { en: "Never mix incompatible fertilizers together without checking guidance.", ta: "வழிகாட்டுதல் இல்லாமல் பொருந்தாத உரங்களை ஒன்றாகக் கலக்க வேண்டாம்." },
-    { en: "Stick to the recommended dosage — excess fertilizer harms both soil and crop.", ta: "பரிந்துரைக்கப்பட்ட அளவைக் கடைபிடிக்கவும் — அதிகப்படியான உரம் மண்ணையும் பயிரையும் பாதிக்கும்." },
-    { en: "Keep bags sealed and off the bare floor on a pallet or plank to avoid moisture damage.", ta: "ஈரப்பதத்தால் சேதமடையாமல் இருக்க பைகளை மூடி, தரையில் நேரடியாக வைக்காமல் தட்டு அல்லது பலகையின் மேல் வைக்கவும்." },
-    { en: "Do not store fertilizer near a water source, as leakage can contaminate it.", ta: "கசிவு ஏற்பட்டால் மாசுபடக்கூடும் என்பதால் தண்ணீர் ஆதாரத்திற்கு அருகில் உரத்தைச் சேமிக்க வேண்டாம்." },
-  ];
-
-  /* ---------------- Persisted state (localStorage) ---------------- */
-
-  const HISTORY_KEY = "agrinova_fert_history";
-  const REMINDER_KEY = "agrinova_fert_reminder";
-
-  function loadHistory() {
-    try { const raw = localStorage.getItem(HISTORY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
-  }
-  function saveHistory(entries) {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(entries)); } catch (e) { /* storage unavailable */ }
-  }
-  function loadReminder() {
-    try { const raw = localStorage.getItem(REMINDER_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
-  }
-  function saveReminder(r) {
-    try { localStorage.setItem(REMINDER_KEY, JSON.stringify(r)); } catch (e) { /* storage unavailable */ }
-  }
-
-  /* ---- Server sync: saved in the farmer's account via the backend (needs login) ---- */
-  function fertOwner() {
-    const e = (localStorage.getItem("loggedInEmail") || localStorage.getItem("email") || "").trim();
-    return /^[A-Za-z0-9_@.+-]{3,120}$/.test(e) ? e : "";
-  }
-  async function fertPost(path, body) {
-    const owner = fertOwner();
-    if (!owner) return null;                       // not logged in: stays on this device only
-    try {
-      const r = await fetch(API_BASE + path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ owner: owner }, body))
-      });
-      return r.ok ? await r.json() : null;
-    } catch (e) { console.error("Fertilizer sync failed:", e); return null; }
-  }
-  async function syncUsageFromServer() {
-    const owner = fertOwner();
-    if (!owner) return;
-    try {
-      const r = await fetch(API_BASE + "/api/fertilizer-usage?owner=" + encodeURIComponent(owner));
-      if (!r.ok) return;
-      const data = await r.json();
-      historyEntries = (data.usage || []).map((u) => ({
-        id: "db" + u.id, dbId: u.id, date: u.used_on, cropV: u.crop_key,
-        fertVs: Array.isArray(u.fert_keys) ? u.fert_keys : [], qty: u.quantity || "",
-        rating: u.rating || 0, notes: u.notes || ""
-      }));
-      saveHistory(historyEntries);
-      renderHistory();
-      renderEffectPanel();
-    } catch (e) { console.error("Fertilizer history load failed:", e); }
-  }
-  function saveFertilizerAdvice() {
-    if (!lastInput || !lastPlan) return;
-    const rows = (lastPlan.rows || []).map((r) => ({ fertilizer: PRODUCT[r.key].name, kg: r.kg }));
-    const total = rows.reduce((sum, r) => sum + (Number(r.kg) || 0), 0);
-    fertPost("/api/fertilizer-advice", {
-      crop: lastInput.cropV, soil: lastInput.soilV, area: lastInput.area,
-      nLevel: lastInput.lv.n, pLevel: lastInput.lv.p, kLevel: lastInput.lv.k,
-      recommended: rows.map((r) => r.fertilizer + " " + (Math.round(r.kg * 10) / 10) + " kg").join(", "),
-      quantity: (Math.round(total * 10) / 10) + " kg",
-      plan: rows
-    });
-  }
-
-  let historyEntries = loadHistory();
-  let reminder = loadReminder();
-
-  // Migrate any old single-fertilizer entries (fertV: "urea") to the new
-  // multi-fertilizer shape (fertVs: ["urea"]) so old saved logs still work.
-  historyEntries = historyEntries.map((e) => {
-    if (!e.fertVs) {
-      return Object.assign({}, e, { fertVs: e.fertV ? [e.fertV] : [] });
+// AgriNova backend — handles:
+//   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision)
+//   2. /api/chat        — agriculture chatbot, called DIRECTLY by chatbot.html (Gemini text)
+//   3. /api/chat-image  — chatbot with photo attachment
+//   4. /api/schemes     — government schemes list
+//   5. /api/fertilizer  — fertilizer recommendation
+//   6. /api/market-price — live Agmarknet mandi prices (data.gov.in) + Gemini fallback
+//   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
+//   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
+//   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
+//      rain alerts (push + email), welcome email, hourly water reminder
+//  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
+//
+// IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
+// a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
+// error paths return 400. /api/chat is called directly by the browser (not
+// through Hasura) so it can use normal REST status codes.
+
+require('dotenv').config();
+const express = require('express');
+const app = express();
+
+app.use(express.json({ limit: '15mb' }));
+
+// CORS: the chatbot page (served from a different origin, e.g. a local
+// Live Server or another host) needs permission to call this backend.
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+app.set('trust proxy', 1); // Render sits behind a proxy, needed for real client IPs
+
+// Simple in-memory rate limit so nobody can burn your Gemini quota.
+const _hits = new Map();
+function rateLimit(max, windowMs) {
+  return (req, res, next) => {
+    const k = req.ip + '|' + req.baseUrl + req.path;
+    const now = Date.now();
+    const h = (_hits.get(k) || []).filter(t => now - t < windowMs);
+    if (h.length >= max) {
+      return res.status(429).json({ error: { message: 'Too many requests. Please wait a minute and try again.' } });
     }
-    return e;
-  });
-  saveHistory(historyEntries);
+    h.push(now);
+    _hits.set(k, h);
+    next();
+  };
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of _hits) if (!v.some(t => now - t < 120000)) _hits.delete(k); }, 5 * 60 * 1000);
+app.use(['/api/chat', '/api/chat-image', '/api/fertilizer', '/api/market-price', '/api/irrigation'], rateLimit(30, 60 * 1000));
+app.use('/api/weather-alerts/email', rateLimit(10, 60 * 1000));
 
-  /* ---------------- State ---------------- */
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+// Used only when the main model keeps answering "high demand" (503/429). Set GEMINI_FALLBACK_MODEL in Render to change it.
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
 
-  let lang = "en";
-  const levels = { n: "medium", p: "medium", k: "medium" };
-  let lastInput = null; // { cropV, soilV, area, lv } from the latest submit
-  let lastPlan = null;
-  let logFertSelected = new Set();
-
-  /* ---------------- Helpers ---------------- */
-
-  function t(key) { return STRINGS[lang][key]; }
-  function label(item) { return lang === "ta" ? item.ta : item.en; }
-
-  function fmtNum(x) {
-    return x >= 10 ? String(Math.round(x)) : String(Math.round(x * 10) / 10);
-  }
-
-  function applyStaticStrings() {
-    document.querySelectorAll("[data-i18n]").forEach((el) => {
-      const key = el.getAttribute("data-i18n");
-      if (STRINGS[lang][key] !== undefined) el.textContent = STRINGS[lang][key];
-    });
-    document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
-      const key = el.getAttribute("data-i18n-ph");
-      if (STRINGS[lang][key] !== undefined) el.setAttribute("placeholder", STRINGS[lang][key]);
-    });
-    document.documentElement.lang = lang === "ta" ? "ta" : "en";
-    document.querySelectorAll(".langswitch button").forEach((btn) => {
-      btn.classList.toggle("is-active", btn.dataset.lang === lang);
-    });
-  }
-
-  function fillOptions(select, rows, currentValue) {
-    select._rows = rows;
-    const prev = currentValue !== undefined && currentValue !== null ? currentValue : select.value;
-    if (select._search) {
-      select._search.placeholder = lang === "ta" ? "தேட தட்டச்சு செய்யவும்..." : "Type to search...";
-    }
-    const q = select._search ? select._search.value.trim().toLowerCase() : "";
-    let list = q ? rows.filter((r) => r.search.indexOf(q) !== -1) : rows;
-    if (!list.length) list = rows;
-    select.innerHTML = "";
-    list.forEach((r) => {
-      const opt = document.createElement("option");
-      opt.value = r.v;
-      opt.textContent = r.text;
-      select.appendChild(opt);
-    });
-    if (prev && Array.prototype.some.call(select.options, (o) => o.value === prev)) select.value = prev;
-  }
-
-  function populateSelect(select, items, currentValue) {
-    fillOptions(select, items.map((it) => ({
-      v: it.v, text: label(it), search: (it.en + " " + it.ta + " " + it.v).toLowerCase(),
-    })), currentValue);
-  }
-
-  function makeSearchable(select) {
-    if (!select || select._search) return;
-    const inp = document.createElement("input");
-    inp.type = "search";
-    inp.className = "input search-input";
-    inp.autocomplete = "off";
-    select.parentElement.insertAdjacentElement("beforebegin", inp);
-    select._search = inp;
-    inp.addEventListener("input", () => fillOptions(select, select._rows || []));
-  }
-
-  /* ---------------- Fertilizer multi-select (Usage history) ---------------- */
-
-  function renderFertMultiselect() {
-    const panel = $("logFertilizerPanel");
-    const btn = $("logFertilizerBtn");
-    panel.innerHTML = FERTS.map((f) => `
-      <label class="multiselect__item">
-        <input type="checkbox" value="${f.v}" ${logFertSelected.has(f.v) ? "checked" : ""}>
-        <span>${escapeHTML(f.label)}</span>
-      </label>`).join("");
-    const chosen = FERTS.filter((f) => logFertSelected.has(f.v));
-    if (chosen.length === 0) {
-      btn.innerHTML = '<span class="ph">' + t("selectFertPh") + "</span>";
-    } else {
-      btn.textContent = chosen.map((f) => f.label).join(", ");
-    }
-  }
-
-  function fertLabelsFor(vs) {
-    return (vs || []).map((v) => {
-      const f = FERTS.find((x) => x.v === v);
-      return f ? f.label : v;
-    });
-  }
-
-  /* ---------------- NPK segmented controls ---------------- */
-
-  function renderSegs() {
-    const wrap = $("npkRows");
-    wrap.innerHTML = "";
-    [["n", "nLabel", "npk-dot--n"], ["p", "pLabel", "npk-dot--p"], ["k", "kLabel", "npk-dot--k"]].forEach(([key, lk, dot]) => {
-      const row = document.createElement("div");
-      row.className = "npk-item";
-      row.innerHTML =
-        '<div class="npk-item__name"><span class="npk-dot ' + dot + '"></span>' + t(lk) + "</div>" +
-        '<div class="seg" role="radiogroup" aria-label="' + t(lk) + '">' +
-        LEVELS.map((l) =>
-          '<button type="button" role="radio" class="seg__btn seg__btn--' + l + (levels[key] === l ? " is-active" : "") +
-          '" aria-checked="' + (levels[key] === l) + '" data-key="' + key + '" data-level="' + l + '">' + t(l) + "</button>"
-        ).join("") + "</div>";
-      wrap.appendChild(row);
-    });
-  }
-
-  /* ---------------- Library accordion ---------------- */
-
-  function buildAccordion(listEl, items, openValue) {
-    listEl.innerHTML = "";
-    items.forEach((f) => {
-      const item = document.createElement("div");
-      item.className = "ftype" + (f.v === openValue ? " is-open" : "");
-      item.dataset.v = f.v;
-      const badgeText = f.b || f.label.slice(0, 3).toUpperCase();
-      item.innerHTML = `
-        <button type="button" class="ftype__head" aria-expanded="${f.v === openValue}">
-          <span class="ftype__badge" style="background:${f.color}">${badgeText}</span>
-          <span class="ftype__name">${f.label}</span>
-          <span class="ftype__chevron"></span>
-        </button>
-        <div class="ftype__body">
-          <div class="ftype__body-inner">${label(f)}</div>
-        </div>`;
-      item.querySelector(".ftype__head").addEventListener("click", () => {
-        const isOpen = item.classList.contains("is-open");
-        listEl.querySelectorAll(".ftype.is-open").forEach((el) => {
-          el.classList.remove("is-open");
-          el.querySelector(".ftype__head").setAttribute("aria-expanded", "false");
-        });
-        if (!isOpen) {
-          item.classList.add("is-open");
-          item.querySelector(".ftype__head").setAttribute("aria-expanded", "true");
-        }
-      });
-      listEl.appendChild(item);
-    });
-  }
-
-  function renderLibraryTabs() {
-    const tabbar = $("libraryTabs");
-    tabbar.innerHTML = "";
-    LIBRARY_TABS.forEach((cat) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.classList.toggle("is-active", cat === activeLibraryTab);
-      btn.setAttribute("role", "tab");
-      btn.textContent = t(LIBRARY_TAB_KEY[cat]);
-      btn.addEventListener("click", () => {
-        activeLibraryTab = cat;
-        renderLibraryTabs();
-        renderLibraryItems(null);
-      });
-      tabbar.appendChild(btn);
-    });
-  }
-
-  function renderLibraryItems(openValue) {
-    const list = $("ftypeList");
-    const items = FERTS.filter((f) => f.category === activeLibraryTab);
-    buildAccordion(list, items, openValue || (list.querySelector(".ftype.is-open")?.dataset.v ?? null));
-  }
-
-  /* ---------------- Simple list renderers ---------------- */
-
-  function renderListItems(ulId, data) {
-    const ul = $(ulId);
-    ul.innerHTML = "";
-    data.forEach((row) => {
-      const li = document.createElement("li");
-      if (ulId === "safetyList") {
-        li.innerHTML = '<span class="ico">' + icon("shield") + "</span><span>" + label(row) + "</span>";
-      } else {
-        li.textContent = label(row);
+// Calls Gemini; retries busy errors (429/500/503/504) with a short wait, then tries the fallback model.
+async function geminiFetch(body, timeoutMs) {
+  const busy = new Set([429, 500, 502, 503, 504]);
+  const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
+    .filter((m, i, a) => m && (i < 3 || a[0] !== m));
+  let lastData = null, lastStatus = 0;
+  for (let i = 0; i < plan.length; i++) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${plan[i]}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs || 30000)
       }
-      ul.appendChild(li);
-    });
+    );
+    let data = null;
+    try { data = await response.json(); } catch (_) { data = {}; }
+    if (response.ok) return { response, data };
+    lastData = data; lastStatus = response.status;
+    if (!busy.has(response.status)) break;                 // real error (bad key, bad request...) - don't retry
+    if (i < plan.length - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
   }
+  const err = new Error((lastData && lastData.error && lastData.error.message) || 'The AI service returned an error.');
+  err.status = lastStatus;
+  throw err;
+}
 
-  function renderWarningBanner() {
-    const banner = $("warningBanner");
-    if (!lastInput) { banner.style.display = "none"; return; }
-    const { n, p, k } = lastInput.lv;
-    const highCount = [n, p, k].filter((v) => v === "high").length;
-    const lowCount = [n, p, k].filter((v) => v === "low").length;
-    let msg = null;
-    if (highCount >= 2) {
-      msg = lang === "ta"
-        ? "பல ஊட்டச்சத்துகள் ஏற்கனவே அதிகமாக உள்ளன — மேலும் உரமிடுவது மண் மற்றும் நீர்நிலைகளுக்கு தீங்கு விளைவிக்கலாம்."
-        : "Several nutrients are already high — further fertilizing risks harming the soil and nearby water bodies.";
-    } else if (lowCount >= 2) {
-      msg = lang === "ta"
-        ? "பல ஊட்டச்சத்துகள் குறைவாக உள்ளன — படிப்படியாக சரிசெய்யவும், ஒரே நேரத்தில் அதிக அளவு உரம் இட வேண்டாம்."
-        : "Multiple nutrients are low — correct them gradually rather than applying a large dose all at once.";
+async function callGemini(parts, maxTokens = 700) {
+  const { data } = await geminiFetch({
+    contents: [{ parts }],
+    generationConfig: { maxOutputTokens: maxTokens }
+  }, 60000);
+  const text = data.candidates &&
+    data.candidates[0] &&
+    data.candidates[0].content &&
+    data.candidates[0].content.parts &&
+    data.candidates[0].content.parts[0] &&
+    data.candidates[0].content.parts[0].text;
+  if (!text) {
+    throw new Error('No text came back from the model.');
+  }
+  return text;
+}
+
+/* Gemini WITH Google Search grounding — reads today's prices from the web.
+   (JSON mode can't be combined with search, so the caller parses the text.) */
+async function callGeminiGrounded(parts, maxTokens = 1000) {
+  const { data } = await geminiFetch({
+    contents: [{ parts }],
+    tools: [{ google_search: {} }],
+    generationConfig: { maxOutputTokens: maxTokens }
+  }, 30000);
+  const cand = data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts
+    ? cand.content.parts.map(p => p.text || '').join('')
+    : '';
+  if (!text) throw new Error('No text came back from the search-grounded model.');
+  return text;
+}
+
+/* ========================= DISEASE DIAGNOSIS (via Hasura) ========================= */
+app.post('/hasura/diagnose', async (req, res) => {
+  try {
+    const { image, mediaType, prompt } = req.body.input || {};
+
+    if (!image || !mediaType || !prompt) {
+      return res.status(400).json({ message: 'Missing image, mediaType, or prompt.' });
     }
-    if (msg) { banner.textContent = msg; banner.style.display = "block"; } else { banner.style.display = "none"; }
-  }
-
-  function renderScheduleForCrop(cropV) {
-    const list = $("scheduleList");
-    const rows = SCHEDULE[cropV] || [];
-    list.innerHTML = "";
-    rows.forEach((row) => {
-      const div = document.createElement("div");
-      div.className = "schedule-row";
-      div.innerHTML = `<div class="schedule-row__stage">${label(row)}</div><div class="schedule-row__detail">${lang === "ta" ? row.detailTa : row.detailEn}</div>`;
-      list.appendChild(div);
-    });
-  }
-
-  /* ---------------- Soil nutrient analysis ---------------- */
-
-  const SCORE = { low: 35, medium: 75, high: 90 };
-
-  function nutrientBarInfo(level) {
-    if (level === "low") return { pct: 30, color: "#B94A2C" };
-    if (level === "medium") return { pct: 62, color: "#B4620F" };
-    return { pct: 92, color: "#1F7A48" };
-  }
-
-  function renderNutrients() {
-    if (!lastInput) return;
-    const lv = lastInput.lv;
-    $("nutriPlaceholder").style.display = "none";
-    const score = Math.round((SCORE[lv.n] + SCORE[lv.p] + SCORE[lv.k]) / 3);
-    const cls = score < 50 ? "low" : score < 80 ? "mid" : "good";
-    const lab = score < 50 ? t("fertLow") : score < 80 ? t("fertMid") : t("fertGood");
-    const defs = [["n", "nLabel", "npk-dot--n"], ["p", "pLabel", "npk-dot--p"], ["k", "kLabel", "npk-dot--k"]];
-
-    $("nutriBody").innerHTML = `
-      <div class="fert-index fert-index--${cls}">
-        <div class="fert-index__score">${score}<small>/100</small></div>
-        <div class="fert-index__meta">
-          <b>${t("fertilityIndex")}</b>
-          <span>${lab}</span>
-          <div class="fert-index__bar"><i style="width:${score}%"></i></div>
-        </div>
-      </div>
-      <div class="nutri-bars">
-        ${defs.map(([key, lk]) => {
-          const info = nutrientBarInfo(lv[key]);
-          return `
-            <div class="nutri-bar">
-              <div class="nutri-bar__track"><div class="nutri-bar__fill" style="height:${info.pct}%;background:${info.color}"></div></div>
-              <div class="nutri-bar__label">${t(lk)}</div>
-              <div class="nutri-bar__status">${t(lv[key])}</div>
-            </div>`;
-        }).join("")}
-      </div>
-      <ul class="insights">
-        ${defs.map(([key, , dot]) => `<li><span class="npk-dot ${dot}"></span><span>${label(INSIGHTS[key][lv[key]])}</span></li>`).join("")}
-      </ul>`;
-  }
-
-  /* ---------------- Recommendation engine (deterministic, exact) ---------------- */
-
-  function computePlan(cropV, soilV, lv, area) {
-    const base = CROP_PLAN[cropV];
-    const dose = {
-      n: base.n * LEVEL_FACTOR[lv.n],
-      p: base.p * LEVEL_FACTOR[lv.p],
-      k: base.k * LEVEL_FACTOR[lv.k],
-    };
-    const pKey = base.pSrc; // "dap" or "ssp"
-    const pKgAcre = dose.p / (pKey === "dap" ? 0.46 : 0.16);
-    const nFromDap = pKey === "dap" ? pKgAcre * 0.18 : 0;
-    const ureaAcre = Math.max(0, dose.n - nFromDap) / 0.46;
-    const mopAcre = dose.k / 0.6;
-
-    const totals = { urea: ureaAcre * area, mop: mopAcre * area };
-    totals[pKey] = pKgAcre * area;
-    const gypsum = base.gypsum ? base.gypsum * area : 0;
-
-    const rows = [
-      { key: "urea", kg: totals.urea, nut: "n" },
-      { key: pKey, kg: totals[pKey], nut: "p" },
-      { key: "mop", kg: totals.mop, nut: "k" },
-    ];
-    if (gypsum) rows.push({ key: "gypsum", kg: gypsum, nut: null });
-
-    const stages = SCHEDULE[cropV].map((st) => {
-      const items = [];
-      const u = totals.urea * st.f.n;
-      const ph = totals[pKey] * st.f.p;
-      const m = totals.mop * st.f.k;
-      if (u >= 0.5) items.push({ key: "urea", kg: u });
-      if (ph >= 0.5) items.push({ key: pKey, kg: ph });
-      if (m >= 0.5) items.push({ key: "mop", kg: m });
-      if (st.gypsum && gypsum) items.push({ key: "gypsum", kg: gypsum });
-      return { row: st, items };
-    });
-
-    const soilMult = { sandy: 1.4, red: 1.2 }[soilV] || 1;
-    const fymT = Math.round(base.fym * soilMult * area * 2) / 2;
-
-    return { rows, stages, fymT };
-  }
-
-  function showRecommendation(scroll) {
-    let area = parseFloat($("areaInput").value);
-    if (!(area > 0)) area = 1;
-    area = Math.min(area, 1000);
-    lastInput = {
-      cropV: $("cropSelect").value,
-      soilV: $("soilSelect").value,
-      area,
-      lv: { n: levels.n, p: levels.p, k: levels.k },
-    };
-    $("scheduleCropSelect").value = lastInput.cropV;
-    renderScheduleForCrop(lastInput.cropV);
-    renderResult();
-    renderNutrients();
-    renderWarningBanner();
-    if (scroll) $("resultCard").scrollIntoView({ behavior: "smooth", block: "start" });
-    if (scroll) saveFertilizerAdvice();
-    fetchAiInsight();
-  }
-
-  function secHead(iconName, key) {
-    return '<h4 class="result__sec"><span class="ico">' + icon(iconName) + "</span>" + t(key) + "</h4>";
-  }
-
-  function renderResult() {
-    if (!lastInput) return;
-    const { cropV, soilV, area, lv } = lastInput;
-    const crop = CROPS.find((c) => c.v === cropV);
-    const soil = SOILS.find((s) => s.v === soilV);
-    const plan = computePlan(cropV, soilV, lv, area);
-    const cp = CROP_PLAN[cropV];
-    const areaText = String(+area.toFixed(2));
-    lastPlan = Object.assign({ crop, soil, areaText }, plan);
-    const allHigh = lv.n === "high" && lv.p === "high" && lv.k === "high";
-
-    const qtyRows = plan.rows.map((r) => {
-      const prod = PRODUCT[r.key];
-      const status = r.nut ? '<span class="status status--' + lv[r.nut] + '">' + t(lv[r.nut]) + "</span>" : "";
-      return `
-        <div class="qty-row">
-          <div><div class="qty-row__name">${prod.name}${status}</div><div class="qty-row__role">${label(prod.role)}</div></div>
-          <div class="qty-row__kg">${fmtNum(r.kg)} kg</div>
-          <div class="qty-row__bags">${fmtNum(r.kg / prod.bag)}</div>
-        </div>`;
-    }).join("");
-
-    const stageHtml = plan.stages.map((s, i) => `
-      <li class="plan__step">
-        <div class="plan__dot">${i + 1}</div>
-        <div>
-          <div class="plan__title">${label(s.row)}</div>
-          <div class="plan__items">${s.items.map((it) => '<span class="pill"><b>' + PRODUCT[it.key].name + "</b>" + fmtNum(it.kg) + " kg</span>").join("")}</div>
-          <p class="plan__detail">${lang === "ta" ? s.row.detailTa : s.row.detailEn}</p>
-        </div>
-      </li>`).join("");
-
-    const html = `
-      <div class="result__head">
-        <div>
-          <p class="result__kicker">${t("planFor")}</p>
-          <h3 class="result__name">${label(crop)}</h3>
-        </div>
-        <div class="result__chips">
-          <span class="chip">${label(soil)}</span>
-          <span class="chip">${areaText} ${t("acreUnit")}</span>
-        </div>
-      </div>
-      ${allHigh ? '<p class="result__banner">' + t("allHighNote") + "</p>" : ""}
-
-      ${secHead("layers", "secRequirement")}
-      <div class="qty">
-        <div class="qty-row qty-row--head"><span>${t("colProduct")}</span><span>${t("colQty")}</span><span>${t("colBags")}</span></div>
-        ${qtyRows}
-      </div>
-      <p class="result__note">${t("qtyNote").replace("{area}", areaText)}</p>
-
-      ${secHead("calendar", "secPlan")}
-      <ol class="plan">${stageHtml}</ol>
-
-      ${secHead("sprout", "secOrganic")}
-      <div class="mini-grid">
-        <div class="mini"><h5>${t("fymTitle")}</h5><span class="mini__big">${fmtNum(plan.fymT)} t</span><p>${t("fymText").replace("{t}", fmtNum(plan.fymT))}</p></div>
-        <div class="mini"><h5>${t("bioTitle")}</h5><p>${label(cp.bio)}</p></div>
-        <div class="mini"><h5>${t("extraTitle")}</h5><p>${label(cp.organic)}</p></div>
-      </div>
-
-      ${secHead("drop", "secMicro")}
-      <p class="text-block">${label(cp.micro)}</p>
-
-      ${secHead("compass", "secSoil")}
-      <ul class="check-list">${SOIL_ADVICE[soilV].map((a) => "<li>" + label(a) + "</li>").join("")}</ul>
-
-      ${secHead("swap", "secAlt")}
-      <ul class="check-list check-list--alt">${ALTERNATIVES.map((a) => "<li>" + label(a) + "</li>").join("")}</ul>
-
-      ${secHead("alert", "secCaution")}
-      <div class="caution"><span class="ico">${icon("alert")}</span><p>${label(cp.caution)}</p></div>
-
-      ${secHead("sparkles", "secAi")}
-      <div class="ai-insight" id="aiInsightBox">
-        <div class="ai-insight__loading"><span class="ai-spinner"></span>${t("aiLoading")}</div>
-      </div>
-
-      <div class="result__actions">
-        <button type="button" class="btn-secondary btn-whatsapp" id="shareBtn"><span class="ico">${icon("share")}</span>${t("btnShare")}</button>
-        <button type="button" class="btn-secondary" id="printBtn"><span class="ico">${icon("print")}</span>${t("btnPrint")}</button>
-      </div>`;
-
-    $("resultPlaceholder").style.display = "none";
-    const body = $("resultBody");
-    body.classList.add("is-visible");
-    body.innerHTML = html;
-    $("shareBtn").addEventListener("click", shareOnWhatsApp);
-    $("printBtn").addEventListener("click", printPlan);
-  }
-
-  /* ---------------- AI insight (real backend call) ---------------- */
-
-  let aiRequestId = 0;
-
-  async function fetchAiInsight() {
-    if (!lastInput) return;
-    const myId = ++aiRequestId;
-    const box = $("aiInsightBox");
-    if (box) box.innerHTML = '<div class="ai-insight__loading"><span class="ai-spinner"></span>' + t("aiLoading") + "</div>";
-
-    const crop = CROPS.find((c) => c.v === lastInput.cropV);
-    const soil = SOILS.find((s) => s.v === lastInput.soilV);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/fertilizer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          crop: crop.en,
-          soil: soil.en,
-          n: lastInput.lv.n,
-          p: lastInput.lv.p,
-          k: lastInput.lv.k,
-          lang,
-        }),
-      });
-      const data = await res.json();
-      if (myId !== aiRequestId) return; // a newer request superseded this one
-      if (!res.ok) throw new Error((data.error && data.error.message) || "AI request failed");
-
-      const box2 = $("aiInsightBox");
-      if (!box2) return;
-      box2.innerHTML = `
-        <dl class="ai-insight__body" style="margin:0">
-          <div class="ai-insight__row"><dt>${t("aiFertilizerName")}</dt><dd>${escapeHTML(data.fertilizerName)}</dd></div>
-          <div class="ai-insight__row"><dt>${t("aiDosage")}</dt><dd>${escapeHTML(data.dosage)}</dd></div>
-          <div class="ai-insight__row"><dt>${t("aiApplication")}</dt><dd>${escapeHTML(data.application)}</dd></div>
-          <div class="ai-insight__row"><dt>${t("aiStage")}</dt><dd>${escapeHTML(data.stage)}</dd></div>
-          <div class="ai-insight__row"><dt>${t("aiTip")}</dt><dd>${escapeHTML(data.tip)}</dd></div>
-        </dl>`;
-    } catch (err) {
-      if (myId !== aiRequestId) return;
-      console.error("AI insight fetch failed:", err);
-      const box3 = $("aiInsightBox");
-      if (box3) box3.innerHTML = '<p class="ai-insight__error">' + t("aiError") + "</p>";
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ message: 'Server is missing GEMINI_API_KEY.' });
     }
-  }
 
-  function buildShareText() {
-    if (!lastPlan) return "";
-    const p = lastPlan;
-    const lines = [];
-    lines.push("AgriNova — " + t("resultTitle"));
-    lines.push(label(p.crop) + " | " + label(p.soil) + " | " + p.areaText + " " + t("acreUnit"));
-    lines.push("");
-    p.rows.forEach((r) => {
-      lines.push("• " + PRODUCT[r.key].name + ": " + fmtNum(r.kg) + " kg (" + fmtNum(r.kg / PRODUCT[r.key].bag) + " " + t("colBags") + ")");
-    });
-    lines.push("");
-    lines.push(t("secPlan") + ":");
-    p.stages.forEach((s, i) => {
-      const items = s.items.map((it) => PRODUCT[it.key].name + " " + fmtNum(it.kg) + " kg").join(", ") || "-";
-      lines.push((i + 1) + ". " + label(s.row) + " — " + items);
-    });
-    lines.push("");
-    lines.push(t("footNote"));
-    return lines.join("\n");
-  }
-
-  function shareOnWhatsApp() {
-    window.open("https://wa.me/?text=" + encodeURIComponent(buildShareText()), "_blank", "noopener");
-  }
-
-  function printPlan() {
-    document.body.classList.add("printing-result");
-    window.print();
-  }
-  window.addEventListener("afterprint", () => document.body.classList.remove("printing-result"));
-
-  /* ---------------- Usage history + effect tracking ---------------- */
-
-  function fmtDate(iso) {
-    if (!iso) return "";
-    const d = new Date(iso + "T00:00:00");
-    if (isNaN(d)) return iso;
-    return d.toLocaleDateString(lang === "ta" ? "ta-IN" : "en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  }
-
-  function renderHistory() {
-    const listEl = $("historyList");
-    const emptyEl = $("historyEmpty");
-    listEl.innerHTML = "";
-    if (historyEntries.length === 0) {
-      emptyEl.style.display = "block";
-      return;
-    }
-    emptyEl.style.display = "none";
-    historyEntries.slice().reverse().forEach((entry) => {
-      const crop = CROPS.find((c) => c.v === entry.cropV);
-      const fertNames = fertLabelsFor(entry.fertVs).join(", ");
-      const row = document.createElement("div");
-      row.className = "history-row";
-      const effectStr = entry.rating
-        ? `<div class="history-row__effect">${"★".repeat(entry.rating)}${"☆".repeat(5 - entry.rating)}${entry.notes ? " — " + entry.notes : ""}</div>`
-        : "";
-      row.innerHTML = `
-        <div class="history-row__main"><b>${fmtDate(entry.date)}</b> · ${crop ? label(crop) : ""} · ${escapeHTML(fertNames)} · ${escapeHTML(entry.qty)}${effectStr}</div>
-        <button type="button" class="history-row__del" data-id="${entry.id}" aria-label="Delete">&times;</button>`;
-      row.querySelector(".history-row__del").addEventListener("click", () => {
-        if (entry.dbId) fertPost("/api/fertilizer-usage/delete", { id: entry.dbId });
-        historyEntries = historyEntries.filter((e) => e.id !== entry.id);
-        saveHistory(historyEntries);
-        renderHistory();
-        renderEffectPanel();
-      });
-      listEl.appendChild(row);
-    });
-  }
-
-  let pendingRating = 0;
-
-  function renderEffectPanel() {
-    const emptyEl = $("effectEmpty");
-    const panel = $("effectPanel");
-    if (historyEntries.length === 0) {
-      emptyEl.style.display = "block";
-      panel.style.display = "none";
-      return;
-    }
-    emptyEl.style.display = "none";
-    panel.style.display = "flex";
-    const latest = historyEntries[historyEntries.length - 1];
-    const crop = CROPS.find((c) => c.v === latest.cropV);
-    const fertNames = fertLabelsFor(latest.fertVs).join(", ");
-    $("effectEntryLabel").innerHTML = `<b>${fmtDate(latest.date)}</b> · ${crop ? label(crop) : ""} · ${escapeHTML(fertNames)}`;
-    pendingRating = latest.rating || 0;
-    renderStars();
-    $("effectNotes").value = latest.notes || "";
-  }
-
-  function renderStars() {
-    const wrap = $("starRating");
-    wrap.innerHTML = "";
-    for (let i = 1; i <= 5; i++) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = "★";
-      btn.setAttribute("aria-label", i + " / 5");
-      btn.className = i <= pendingRating ? "is-filled" : "";
-      btn.addEventListener("click", () => { pendingRating = i; renderStars(); });
-      wrap.appendChild(btn);
-    }
-  }
-
-  /* ---------------- Reminder ---------------- */
-
-  function renderReminderBanner() {
-    const banner = $("reminderBanner");
-    if (!reminder || !reminder.date) { banner.style.display = "none"; return; }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(reminder.date + "T00:00:00");
-    const diffDays = Math.round((due - today) / 86400000);
     let text;
-    if (diffDays < 0) {
-      text = `${t("reminderOverdue")} ${fmtDate(reminder.date)}${reminder.note ? " — " + reminder.note : ""}`;
-      banner.classList.add("is-due");
-    } else if (diffDays === 0) {
-      text = `${t("reminderToday")} ${reminder.note || ""}`;
-      banner.classList.add("is-due");
-    } else {
-      text = `${diffDays} ${t("reminderDueSoon")} ${fmtDate(reminder.date)}${reminder.note ? " — " + reminder.note : ""}`;
-      banner.classList.remove("is-due");
-    }
-    banner.textContent = text;
-    banner.style.display = "block";
-  }
-
-  /* ---------------- Knowledge tip ---------------- */
-
-  function renderKnowledgeTip() {
-    $("knowledgeTip").textContent = label(KNOWLEDGE_TIPS[tipIndex]);
-  }
-
-  /* ---------------- Init / language ---------------- */
-
-  function setLanguage(newLang) {
-    lang = newLang;
-    const cropV = $("cropSelect").value;
-    const soilV = $("soilSelect").value;
-    const scheduleCropV = $("scheduleCropSelect").value;
-    const logCropV = $("logCrop").value;
-
-    applyStaticStrings();
-    populateSelect($("cropSelect"), CROPS, cropV);
-    populateSelect($("soilSelect"), SOILS, soilV);
-    populateSelect($("scheduleCropSelect"), CROPS, scheduleCropV || "rice");
-    populateSelect($("logCrop"), CROPS, logCropV);
-    renderFertMultiselect();
-
-    renderSegs();
-    renderLibraryTabs();
-    renderLibraryItems(null);
-    renderScheduleForCrop($("scheduleCropSelect").value);
-
-    const irr = $("irrigationList"); irr.innerHTML = "";
-    IRRIGATION_TIPS.forEach((row) => { const li = document.createElement("li"); li.textContent = label(row); irr.appendChild(li); });
-    const wl = $("warningList"); wl.innerHTML = "";
-    WARNING_SIGNS.forEach((row) => { const li = document.createElement("li"); li.textContent = label(row); wl.appendChild(li); });
-
-    renderWarningBanner();
-    renderListItems("guideList", GUIDE);
-    renderListItems("safetyList", SAFETY);
-    renderHistory();
-    renderEffectPanel();
-    renderReminderBanner();
-    renderKnowledgeTip();
-
-    if (lastInput) { renderResult(); renderNutrients(); fetchAiInsight(); }
-  }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    injectIcons();
-
-    ["cropSelect", "soilSelect", "scheduleCropSelect", "logCrop"].forEach((id) => makeSearchable($(id)));
-
-    document.querySelectorAll(".langswitch button").forEach((btn) => {
-      btn.addEventListener("click", () => setLanguage(btn.dataset.lang));
-    });
-
-    $("npkRows").addEventListener("click", (e) => {
-      const btn = e.target.closest(".seg__btn");
-      if (!btn) return;
-      levels[btn.dataset.key] = btn.dataset.level;
-      renderSegs();
-    });
-
-    // Fertilizer multi-select: toggle panel, handle checkbox changes.
-    $("logFertilizerBtn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      const panel = $("logFertilizerPanel");
-      const btn = $("logFertilizerBtn");
-      const opening = !panel.classList.contains("is-open");
-      panel.classList.toggle("is-open", opening);
-      btn.classList.toggle("is-open", opening);
-      btn.setAttribute("aria-expanded", String(opening));
-    });
-    $("logFertilizerPanel").addEventListener("change", (e) => {
-      const cb = e.target.closest('input[type="checkbox"]');
-      if (!cb) return;
-      if (cb.checked) logFertSelected.add(cb.value);
-      else logFertSelected.delete(cb.value);
-      renderFertMultiselect();
-      // Keep panel open so the farmer can pick several fertilizers in a row.
-      $("logFertilizerPanel").classList.add("is-open");
-      $("logFertilizerBtn").classList.add("is-open");
-    });
-    document.addEventListener("click", (e) => {
-      const wrap = $("logFertilizerMulti");
-      if (wrap && !wrap.contains(e.target)) {
-        $("logFertilizerPanel").classList.remove("is-open");
-        $("logFertilizerBtn").classList.remove("is-open");
-      }
-    });
-
-    $("recommendForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      showRecommendation(true);
-    });
-
-    $("scheduleCropSelect").addEventListener("change", (e) => renderScheduleForCrop(e.target.value));
-
-    $("logDate").value = new Date().toISOString().slice(0, 10);
-
-    $("historyForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (logFertSelected.size === 0) {
-        $("logFertilizerBtn").style.borderColor = "var(--danger)";
-        setTimeout(() => { $("logFertilizerBtn").style.borderColor = ""; }, 1200);
-        return;
-      }
-      const newEntry = {
-        id: Date.now().toString(36),
-        date: $("logDate").value,
-        cropV: $("logCrop").value,
-        fertVs: Array.from(logFertSelected),
-        qty: $("logQty").value.trim(),
-        rating: 0,
-        notes: "",
-      };
-      historyEntries.push(newEntry);
-      saveHistory(historyEntries);
-      fertPost("/api/fertilizer-usage", newEntry).then((res) => {
-        if (res && res.id) { newEntry.dbId = res.id; saveHistory(historyEntries); }
-      });
-      $("logQty").value = "";
-      logFertSelected = new Set();
-      renderFertMultiselect();
-      renderHistory();
-      renderEffectPanel();
-    });
-
-    $("saveEffectBtn").addEventListener("click", () => {
-      if (historyEntries.length === 0) return;
-      const latest = historyEntries[historyEntries.length - 1];
-      latest.rating = pendingRating;
-      latest.notes = $("effectNotes").value.trim();
-      saveHistory(historyEntries);
-      if (latest.dbId) fertPost("/api/fertilizer-usage/update", { id: latest.dbId, rating: latest.rating, notes: latest.notes });
-      renderHistory();
-      const btn = $("saveEffectBtn");
-      btn.textContent = t("effectSaved");
-      setTimeout(() => { btn.textContent = t("effectSaveBtn"); }, 1200);
-    });
-
-    $("reminderForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      reminder = { date: $("reminderDate").value, note: $("reminderNote").value.trim() };
-      saveReminder(reminder);
-      renderReminderBanner();
-    });
-    if (reminder) {
-      $("reminderDate").value = reminder.date || "";
-      $("reminderNote").value = reminder.note || "";
+    try {
+      text = await callGemini([
+        { text: prompt },
+        { inline_data: { mime_type: mediaType, data: image } }
+      ], 2500);
+    } catch (e) {
+      console.error('Gemini API error (diagnose):', e);
+      return res.status(400).json({ message: e.message || 'The AI service returned an error.' });
     }
 
-    $("nextTipBtn").addEventListener("click", () => {
-      tipIndex = (tipIndex + 1) % KNOWLEDGE_TIPS.length;
-      renderKnowledgeTip();
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1) {
+      return res.status(400).json({ message: 'Could not parse a result from the model.' });
+    }
+
+    const diag = JSON.parse(text.slice(start, end + 1));
+
+    res.json({
+      diseaseName: diag.diseaseName || 'Unidentified',
+      latinName: diag.latinName || null,
+      crop: diag.crop || 'Unidentified plant',
+      status: diag.status || 'mild',
+      confidence: typeof diag.confidence === 'number' ? diag.confidence : 0,
+      severity: typeof diag.severity === 'number' ? diag.severity : 0,
+      description: diag.description || '',
+      actions: Array.isArray(diag.actions) ? diag.actions : [],
+      note: diag.note || null
     });
 
-    /* Bottom nav: highlight the section currently in view */
-    const navLinks = document.querySelectorAll(".bottomnav a");
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((en) => {
-        if (en.isIntersecting) {
-          navLinks.forEach((a) => a.classList.toggle("is-active", a.getAttribute("href") === "#" + en.target.id));
-        }
-      });
-    }, { rootMargin: "-35% 0px -60% 0px" });
-    ["sec-recommend", "sec-library", "sec-schedule", "sec-track", "sec-tips"].forEach((id) => io.observe($(id)));
+  } catch (err) {
+    console.error('Hasura diagnose handler crashed:', err);
+    res.status(400).json({ message: 'Server error while running the diagnosis.' });
+  }
+});
 
-    setLanguage("en");
-    injectIcons();
-    syncUsageFromServer();
+/* ============================= CHATBOT (direct REST) ============================= */
+// Called directly by chatbot.html's fetch("/api/chat") — NOT through Hasura.
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, history, lang } = req.body || {};
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: { message: 'Missing message.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    // history comes as [{role: "user"|"assistant", content: "..."}] from the frontend.
+    const historyText = Array.isArray(history) && history.length
+      ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
+      : '';
+
+    const languageRule = lang === 'ta'
+      ? `2. The app's language toggle is set to TAMIL. You MUST write your ENTIRE reply in the Tamil language, using Tamil (தமிழ்) script only — regardless of what script the farmer typed in (English, Tanglish, or Tamil). Do not mix in English sentences, and do not reply in Tanglish.`
+      : lang === 'en'
+      ? `2. The app's language toggle is set to ENGLISH. You MUST write your ENTIRE reply in plain English — regardless of what script the farmer typed in.`
+      : `2. Match the farmer's exact language STYLE from their latest message:
+   - If they wrote in pure English → reply in pure English.
+   - If they wrote in Tamil script (தமிழ் எழுத்துக்கள்) → reply entirely in Tamil script.
+   - If they wrote in "Tanglish" (Tamil words spelled out using English/Latin letters, e.g. "eppadi irukeenga", "enna panna venum") → reply in that SAME Tanglish style — Tamil words in Latin letters, casual and easy to read, NOT in Tamil script and NOT in formal English.
+   Do not switch styles on your own; mirror exactly what the farmer used.`;
+
+    const systemPrompt = `You are "AgriNova Assistant" (AgriAssist AI), a friendly, knowledgeable agricultural expert chatbot for a farming app. You help farmers with questions about crops, plant diseases, pests, fertilizers, irrigation, soil health, weather-related farming decisions, market/harvest timing, and general farming best practices.
+
+RULES:
+1. Only answer questions related to agriculture, farming, crops, plants, livestock basics, or the AgriNova app itself. If the farmer asks something completely unrelated (e.g. politics, entertainment, coding), politely say you can only help with farming and agriculture topics, and steer back.
+${languageRule}
+3. Keep answers practical, concise, and easy for a farmer to act on — prefer short paragraphs or bullet-style steps over long essays.
+4. If you're not fully certain about something (e.g. exact chemical dosages, local regulations), say so and suggest confirming with a local agricultural extension officer.
+5. Be warm and encouraging in tone, like a helpful local agricultural officer.
+6. FORMATTING: Write in plain conversational text, like a text message. Do NOT use markdown syntax — no "###" headings, no "**bold**" asterisks, no numbered "1." lists. If you need to list a few steps, put each one on its own line starting with a simple dash "-", and keep the whole reply to a few short lines or a short paragraph. Avoid long essays; keep it skimmable on a small phone screen.
+7. LENGTH: Keep replies SHORT by default — 2 to 5 sentences, or up to 5 short dash-bullet lines if listing steps. Only go longer if the farmer explicitly asks for more detail (e.g. "explain in detail", "give me everything").
+
+${historyText}Farmer: ${message}
+AgriNova Assistant:`;
+
+    let text;
+    try {
+      text = await callGemini([{ text: systemPrompt }], 1500);
+    } catch (e) {
+      console.error('Gemini API error (chat):', e);
+      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+    }
+
+    res.json({ reply: text.trim() });
+
+  } catch (err) {
+    console.error('Chat handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while chatting.' } });
+  }
+});
+
+/* ===================== CHATBOT WITH PHOTO ATTACHMENT ===================== */
+// Called when the farmer attaches a photo in the chat ("+" menu → Add photo).
+// Reuses the same Gemini vision capability as the disease detector, but lets
+// the farmer ask a free-form question about the photo instead of a fixed
+// diagnosis format.
+app.post('/api/chat-image', async (req, res) => {
+  try {
+    const { message, image, mediaType, history } = req.body || {};
+
+    if (!image || !mediaType) {
+      return res.status(400).json({ error: { message: 'Missing image or mediaType.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    const historyText = Array.isArray(history) && history.length
+      ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
+      : '';
+
+    const userMessage = message && message.trim() ? message.trim() : 'What can you tell me about this photo? (No specific question was given — describe what you see and anything relevant to a farmer.)';
+
+    const systemPrompt = `You are "AgriNova Assistant", a friendly, knowledgeable agricultural expert chatbot for a farming app. The farmer has attached a photo along with their message. Look at the photo carefully and answer helpfully — this could be a crop, leaf, pest, soil, equipment, or anything farming-related.
+
+RULES:
+1. Only discuss agriculture, farming, crops, plants, pests, soil, or the AgriNova app itself. If the photo or question is unrelated to farming, politely say so.
+2. Match the farmer's language/style from their message (English, Tamil script, or Tanglish) — mirror exactly what they used. If no text was given, reply in English.
+3. FORMATTING: Plain conversational text, no markdown symbols (no ###, no **). Use simple dash "-" bullets only if listing steps, and keep it short and skimmable.
+4. Be warm and practical, like a helpful local agricultural officer. If unsure, say so and suggest a local expert.
+
+${historyText}Farmer (with attached photo): ${userMessage}
+AgriNova Assistant:`;
+
+    let text;
+    try {
+      text = await callGemini([
+        { text: systemPrompt },
+        { inline_data: { mime_type: mediaType, data: image } }
+      ], 1500);
+    } catch (e) {
+      console.error('Gemini API error (chat-image):', e);
+      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+    }
+
+    res.json({ reply: text.trim() });
+
+  } catch (err) {
+    console.error('Chat-image handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while analyzing the photo.' } });
+  }
+});
+
+/* ===================== GOVERNMENT SCHEMES ===================== */
+// Cached for 24 hours — this keeps page loads fast for everyone, and means
+// we only attempt the (quota-limited) Google Search grounding once a day,
+// which is far less likely to hit the free-tier quota than trying on every
+// page load. If grounding fails for any reason, we fall back immediately
+// to a plain (non-grounded) list so the page never shows an empty error.
+let schemesCache = { data: null, updatedAt: 0 };
+const SCHEMES_CACHE_TTL = 2 * 60 * 60 * 1000;
+
+const SCHEMES_PROMPT = `You are a research assistant helping Indian farmers. List CURRENT Indian government agricultural schemes relevant to farmers — covering Central Government schemes, Tamil Nadu state government schemes, and subsidy programs.
+
+Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
+{
+  "schemes": [
+    {
+      "name": "scheme name",
+      "benefits": "1-2 sentence summary of benefits",
+      "eligibility": "1-2 sentence summary of who qualifies",
+      "documents": "short comma-separated list of required documents",
+      "link": "official government URL for this scheme",
+      "category": "central" | "tamilnadu" | "subsidy"
+    }
+  ],
+  "officialUpdates": [
+    { "title": "short headline of a recent official announcement", "link": "official URL" }
+  ]
+}
+
+Include 14 to 16 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in, myscheme.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, horticulture, etc.) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL. If unsure of the exact page URL for a scheme, use "https://www.myscheme.gov.in" instead of guessing.`;
+
+// Large scheme lists sometimes get cut off mid-response (token limit hit
+// mid-array). This tries a normal parse first, and if that fails, trims
+// back to the last complete object and closes whatever brackets are still
+// open — so the farmer sees a slightly shorter (but valid) list instead of
+// a hard error.
+function parseSchemesJson(text) {
+  const start = text.indexOf('{');
+  if (start === -1) throw new Error('No JSON object found in response.');
+  const jsonStr = text.slice(start);
+
+  const end = jsonStr.lastIndexOf('}');
+  if (end !== -1) {
+    try {
+      return JSON.parse(jsonStr.slice(0, end + 1));
+    } catch (e) { /* fall through to repair */ }
+  }
+
+  const lastCompleteObjEnd = Math.max(jsonStr.lastIndexOf('},'), jsonStr.lastIndexOf('}\n'), jsonStr.lastIndexOf('} '));
+  if (lastCompleteObjEnd === -1) throw new Error('Could not parse schemes JSON.');
+
+  let repaired = jsonStr.slice(0, lastCompleteObjEnd + 1);
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+
+  let suffix = '';
+  for (let i = 0; i < (openBrackets - closeBrackets); i++) suffix += ']';
+  for (let i = 0; i < (openBraces - closeBraces); i++) suffix += '}';
+
+  return JSON.parse(repaired + suffix);
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchSchemesPlain() {
+  // Retries once on transient errors (e.g. "model is currently experiencing
+  // high demand"), since those usually succeed a moment later.
+  let lastErr;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const text = await callGemini([{ text: SCHEMES_PROMPT }], 8000);
+      const parsed = parseSchemesJson(text);
+      parsed.grounded = false;
+      return parsed;
+    } catch (e) {
+      lastErr = e;
+      console.error(`Schemes fetch attempt ${attempt} failed:`, e.message);
+      if (attempt < 2) await sleep(2000);
+    }
+  }
+  throw lastErr;
+}
+
+app.get('/api/schemes', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (schemesCache.data && (now - schemesCache.updatedAt) < SCHEMES_CACHE_TTL) {
+      return res.json(schemesCache.data);
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    let parsed;
+    try {
+      // Search grounding hits the free-tier quota too easily when combined
+      // with everything else the app calls, so we go straight to the
+      // reliable plain list — one request instead of up to three.
+      parsed = await fetchSchemesPlain();
+    } catch (e) {
+      console.error('Schemes fetch failed after retry:', e.message);
+      // If we have a stale cached copy, serve that rather than failing —
+      // an older list beats no list at all.
+      if (schemesCache.data) {
+        return res.json(schemesCache.data);
+      }
+      return res.status(400).json({ error: { message: e.message || 'Could not fetch scheme data. Please try again in a moment.' } });
+    }
+
+    parsed.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    schemesCache = { data: parsed, updatedAt: now };
+    res.json(parsed);
+
+  } catch (err) {
+    console.error('Schemes handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while fetching schemes.' } });
+  }
+});
+
+/* ===================== FERTILIZER RECOMMENDATION (AI-powered) ===================== */
+app.post('/api/fertilizer', async (req, res) => {
+  try {
+    const { crop, soil, n, p, k, lang } = req.body || {};
+
+    if (!crop || !soil || !n || !p || !k) {
+      return res.status(400).json({ error: { message: 'Missing crop, soil, or nutrient levels.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    const langLine = lang === 'ta'
+      ? 'Write EVERY text field entirely in the TAMIL language (தமிழ் script).'
+      : 'Write every text field in English.';
+
+    const prompt = `You are an expert agronomist advising an Indian farmer through a fertilizer-management app.
+
+Field details:
+- Crop: ${crop}
+- Soil type: ${soil}
+- Nitrogen (N) status: ${n}
+- Phosphorus (P) status: ${p}
+- Potassium (K) status: ${k}
+
+Give a specific, practical fertilizer recommendation for exactly this combination of crop, soil type, and nutrient status — the soil type should meaningfully affect your advice (e.g. sandy soil leaches nutrients faster, clay soil retains them longer, black/red soils differ in nutrient-holding capacity).
+
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences, no preamble) in exactly this shape:
+{
+  "fertilizerName": "the primary fertilizer or combination to use (e.g. 'Urea + MOP' or 'NPK 19:19:19')",
+  "dosage": "a practical dosage guideline, e.g. per acre or per hectare",
+  "application": "2-3 sentences on how and when to apply it, considering the soil type given",
+  "stage": "the current growth stage this recommendation targets, and what to watch for next",
+  "tip": "one extra practical tip specific to this soil type and crop combination"
+}`;
+
+    let text;
+    try {
+      text = await callGemini([{ text: prompt }], 2000);
+    } catch (e) {
+      console.error('Gemini API error (fertilizer):', e);
+      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+    }
+
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1) {
+      return res.status(400).json({ error: { message: 'Could not parse the recommendation.' } });
+    }
+
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    res.json(parsed);
+
+  } catch (err) {
+    console.error('Fertilizer handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while generating the recommendation.' } });
+  }
+});
+
+/* ===================== MARKET PRICE (live Agmarknet + AI fallback) ===================== */
+// Live mandi prices come from the official Agmarknet dataset on data.gov.in.
+// Seeds / fertilizers (and anything with no live data) fall back to a Gemini
+// estimate, clearly marked source: "ai" so the frontend can label it.
+const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY;
+const AGMARK_RESOURCE = '9ef84268-d588-465a-a308-a864a43d0070';
+
+// App crop name -> possible Agmarknet commodity names (tried in order)
+const AGMARK_NAMES = {
+  'Tomato': ['Tomato'],
+  'Onion': ['Onion'],
+  'Potato': ['Potato'],
+  'Carrot': ['Carrot'],
+  'Beetroot': ['Beetroot'],
+  'Cabbage': ['Cabbage'],
+  'Cauliflower': ['Cauliflower'],
+  'Brinjal': ['Brinjal'],
+  'Okra': ['Bhindi(Ladies Finger)'],
+  'Green Chilli': ['Green Chilli'],
+  'Drumstick': ['Drumstick'],
+  'Cucumber': ['Cucumbar(Kheera)'],
+  'Rice': ['Rice', 'Paddy(Dhan)(Common)'],
+  'Wheat': ['Wheat'],
+  'Maize': ['Maize'],
+  'Ragi': ['Ragi (Finger Millet)'],
+  'Bajra': ['Bajra(Pearl Millet/Cumbu)'],
+  'Sorghum': ['Jowar(Sorghum)'],
+  'Green Gram': ['Green Gram (Moong)(Whole)'],
+  'Black Gram': ['Black Gram (Urd Beans)(Whole)'],
+  'Red Gram': ['Arhar (Tur/Red Gram)(Whole)'],
+  'Bengal Gram': ['Bengal Gram(Gram)(Whole)'],
+  'Kidney Beans': ['Rajmash Beans', 'French Beans (Frasbean)'],
+  'Groundnut': ['Groundnut'],
+  'Soybean': ['Soyabean'],
+  'Sunflower': ['Sunflower'],
+  'Sesame': ['Sesamum(Sesame,Gingelly,Til)'],
+  'Mustard': ['Mustard'],
+  'Banana': ['Banana'],
+  'Mango': ['Mango'],
+  'Apple': ['Apple'],
+  'Orange': ['Orange'],
+  'Papaya': ['Papaya'],
+  'Guava': ['Guava'],
+  'Pomegranate': ['Pomegranate'],
+  'Watermelon': ['Water Melon'],
+  'Coconut': ['Coconut'],
+  'Turmeric': ['Turmeric'],
+  'Chilli': ['Dry Chillies', 'Green Chilli'],
+  'Ginger': ['Ginger(Green)', 'Ginger(Dry)'],
+  'Garlic': ['Garlic'],
+  'Pepper': ['Black pepper'],
+  'Cardamom': ['Cardamoms'],
+  'Cinnamon': ['Cinnamon']
+};
+
+const marketPriceCache = new Map();
+const PRICE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+async function fetchAgmark(state, commodity) {
+  // The API accepts the state filter as "state.keyword" on some setups and
+  // plain "state" on others, so try both and use whichever returns rows.
+  let lastErr = null;
+  for (const field of ['state.keyword', 'state']) {
+    try {
+      const url = new URL(`https://api.data.gov.in/resource/${AGMARK_RESOURCE}`);
+      url.searchParams.set('api-key', DATA_GOV_API_KEY);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('limit', '1000');
+      url.searchParams.set(`filters[${field}]`, state);
+      url.searchParams.set('filters[commodity]', commodity);
+
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) { lastErr = new Error(`Agmarknet API returned ${r.status}`); continue; }
+      const data = await r.json();
+      const records = Array.isArray(data.records) ? data.records : [];
+      if (records.length) return records;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return [];
+}
+
+function parseAgmarkDate(s) { // "28/09/2026" -> timestamp
+  const [d, m, y] = String(s || '').split('/').map(Number);
+  return y ? new Date(y, m - 1, d).getTime() : 0;
+}
+
+function summarize(records) {
+  const mins = records.map(r => Number(r.min_price)).filter(n => n > 0);
+  const maxs = records.map(r => Number(r.max_price)).filter(n => n > 0);
+  const mods = records.map(r => Number(r.modal_price)).filter(n => n > 0);
+  if (!mins.length || !maxs.length || !mods.length) return null;
+  const avg = a => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  return { min: Math.min(...mins), max: Math.max(...maxs), modal: avg(mods) };
+}
+
+// Picks the best level: market -> district -> state. Uses only the latest date.
+function pickPrice(records, district, market) {
+  if (!records.length) return null;
+  const latest = Math.max(...records.map(r => parseAgmarkDate(r.arrival_date)));
+  const fresh = records.filter(r => parseAgmarkDate(r.arrival_date) === latest);
+  const date = fresh[0].arrival_date;
+  const low = s => String(s || '').toLowerCase().trim();
+
+  const base = low(market).replace(/\s*market$/, '').replace(/\s*central$/, '');
+  const byMarket = fresh.filter(r => {
+    const rm = low(r.market);
+    return rm && (rm.includes(base) || base.includes(rm));
   });
-})();
-</script>
-</body>
-</html>
+  let s = summarize(byMarket);
+  if (s) return { ...s, level: 'market', date };
+
+  const byDistrict = fresh.filter(r => low(r.district) === low(district));
+  s = summarize(byDistrict);
+  if (s) return { ...s, level: 'district', date };
+
+  s = summarize(fresh);
+  if (s) return { ...s, level: 'state', date };
+  return null;
+}
+
+function liveNote(level, date, market, district, state, ta) {
+  if (ta) {
+    const where = level === 'market' ? market : level === 'district' ? `${district} மாவட்ட சராசரி` : `${state} மாநில சராசரி`;
+    const extra = level === 'market' ? '' : ' (இந்த சந்தைக்கு இன்று தரவு இல்லை)';
+    return `அதிகாரப்பூர்வ Agmarknet நேரடி விலை (${date}) — ${where}${extra}. விலை ஒரு குவிண்டாலுக்கு.`;
+  }
+  const where = level === 'market' ? market : level === 'district' ? `${district} district average` : `${state} state average`;
+  const extra = level === 'market' ? '' : ' (no data for this market today)';
+  return `Official Agmarknet live mandi price (${date}) — ${where}${extra}. Price per quintal.`;
+}
+
+async function aiPriceSearch({ state, district, market, crop, lang }) {
+  const langLine = lang === 'ta'
+    ? 'Write the "note" field in TAMIL (தமிழ் script).'
+    : 'Write the "note" field in English.';
+  const today = new Date().toLocaleDateString('en-IN');
+  const prompt = `Today is ${today}. Use Google Search to find the LATEST wholesale mandi price (Agmarknet / APMC / market reports / news) for this product in India.
+
+Product: ${crop}
+Market: ${market}
+District: ${district}
+State: ${state}
+
+Rules:
+- Prefer the exact market; else the district; else the state average.
+- Use Indian Rs per quintal (100 kg). Convert if the source uses per kg (multiply by 100).
+- Only report numbers you actually found in a source. If you cannot find a recent price, set "found" to false and do NOT guess.
+- min <= modal <= max, all integers in rupees.
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
+{ "found": true, "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "priceDate": "date of the price", "where": "market/district/state the price is for", "note": "one short sentence naming the source and date" }`;
+
+  const text = await callGeminiGrounded([{ text: prompt }], 2500);
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  if (a === -1 || b === -1) throw new Error('Could not parse the searched price.');
+  const p = JSON.parse(text.slice(a, b + 1));
+  const min = Number(p.min), max = Number(p.max), modal = Number(p.modal);
+  if (!p.found || !(min > 0) || !(max > 0) || !(modal > 0) || min > modal || modal > max) return null;
+  return {
+    min, max, modal,
+    unit: p.unit || 'per quintal',
+    note: p.note || '',
+    date: p.priceDate || '',
+    source: 'search'
+  };
+}
+
+async function aiPriceEstimate({ state, district, market, crop, category, lang }) {
+  const langLine = lang === 'ta'
+    ? 'Write the "note" field in TAMIL (தமிழ் script).'
+    : 'Write the "note" field in English.';
+  const prompt = `You are an Indian agricultural market analyst. Estimate a realistic current price for this product in India.
+
+State: ${state}
+District: ${district}
+Market: ${market}
+Product: ${crop}
+Category: ${category || 'unknown'}
+
+Rules:
+- For crops/produce use Indian Rs per quintal.
+- For fertilizers use the Indian government-controlled retail rate per bag (e.g. Urea 45 kg bag) and set unit accordingly.
+- For seeds use a typical retail price per kg or per packet and set unit accordingly.
+- All prices are integers in rupees.
+${langLine}
+
+Respond ONLY with raw JSON (no markdown fences) in exactly this shape:
+{ "min": 0, "max": 0, "modal": 0, "unit": "per quintal", "note": "short note saying this is an estimate, confirm with the local market" }`;
+
+  const text = await callGemini([{ text: prompt }], 2000);
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if (s === -1 || e === -1) throw new Error('Could not parse the price estimate.');
+  const p = JSON.parse(text.slice(s, e + 1));
+  return {
+    min: Number(p.min) || null,
+    max: Number(p.max) || null,
+    modal: Number(p.modal) || null,
+    unit: p.unit || 'per quintal',
+    note: p.note || '',
+    source: 'ai'
+  };
+}
+
+app.post('/api/market-price', async (req, res) => {
+  try {
+    const { state, district, market, crop, category, lang } = req.body || {};
+    if (!state || !district || !market || !crop) {
+      return res.status(400).json({ error: { message: 'Missing state, district, market, or crop.' } });
+    }
+
+    const key = [state, district, market, crop, lang].join('|');
+    const cached = marketPriceCache.get(key);
+    if (cached && Date.now() - cached.at < (cached.ttl || PRICE_CACHE_TTL)) return res.json(cached.data);
+
+    let result = null;
+
+    // 1) Live Agmarknet data — all commodity names tried IN PARALLEL
+    const names = AGMARK_NAMES[crop];
+    if (names && DATA_GOV_API_KEY) {
+      const results = await Promise.all(names.map(async name => {
+        try {
+          return pickPrice(await fetchAgmark(state, name), district, market);
+        } catch (e) {
+          console.error(`Agmarknet fetch failed for ${name}:`, e.message);
+          return null;
+        }
+      }));
+      const picked = results.find(Boolean);
+      if (picked) {
+        result = {
+          min: picked.min,
+          max: picked.max,
+          modal: picked.modal,
+          unit: 'per quintal',
+          note: liveNote(picked.level, picked.date, market, district, state, lang === 'ta'),
+          source: 'live',
+          level: picked.level,
+          date: picked.date
+        };
+      }
+    }
+
+    // 2) Gemini + Google Search: latest price read from the web
+    if (!result && GEMINI_API_KEY && AGMARK_NAMES[crop]) {
+      try {
+        result = await aiPriceSearch({ state, district, market, crop, lang });
+      } catch (e) {
+        console.error('Searched price failed:', e.message);
+      }
+    }
+
+    // 3) Fallback: plain Gemini estimate, with 1 retry
+    if (!result && GEMINI_API_KEY) {
+      for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+        try {
+          result = await aiPriceEstimate({ state, district, market, crop, category, lang });
+        } catch (e) {
+          console.error(`AI price estimate attempt ${attempt} failed:`, e.message);
+          if (attempt < 2) await sleep(1500);
+        }
+      }
+    }
+
+    // 4) Everything failed: serve an older cached copy if we have one
+    if (!result) {
+      if (cached) return res.json(cached.data);
+      return res.status(400).json({ error: { message: 'Could not fetch the price right now.' } });
+    }
+
+    console.log(`market-price ${crop} @ ${state}/${district}: source=${result.source}${result.level ? ' level=' + result.level : ''}`);
+    marketPriceCache.set(key, { at: Date.now(), ttl: result.source === 'live' ? PRICE_CACHE_TTL : result.source === 'search' ? 15 * 60 * 1000 : 5 * 60 * 1000, data: result });
+    res.json(result);
+
+  } catch (err) {
+    console.error('Market price handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while fetching the price.' } });
+  }
+});
+
+/* ===================== IRRIGATION ADVISOR (Open-Meteo weather + FAO-56 water balance + Gemini tips) ===================== */
+// Crop coefficients (Kc: initial / mid / late), max root depth (m), allowed depletion fraction (p) — FAO-56 approximate values.
+const IRR_CROPS = {
+  'Rice': { kc: [1.05, 1.2, 0.9], root: 0.5, p: 0.2 },
+  'Wheat': { kc: [0.4, 1.15, 0.4], root: 1.0 },
+  'Maize': { kc: [0.4, 1.2, 0.6], root: 1.0 },
+  'Ragi': { kc: [0.35, 1.0, 0.4], root: 0.8 },
+  'Sugarcane': { kc: [0.4, 1.25, 0.75], root: 1.2 },
+  'Cotton': { kc: [0.35, 1.15, 0.7], root: 1.2 },
+  'Groundnut': { kc: [0.4, 1.15, 0.6], root: 0.5 },
+  'Tomato': { kc: [0.6, 1.15, 0.8], root: 0.7 },
+  'Onion': { kc: [0.7, 1.05, 0.75], root: 0.3 },
+  'Potato': { kc: [0.5, 1.15, 0.75], root: 0.4 },
+  'Brinjal': { kc: [0.6, 1.05, 0.9], root: 0.7 },
+  'Okra': { kc: [0.5, 1.0, 0.7], root: 0.6 },
+  'Chilli': { kc: [0.6, 1.05, 0.9], root: 0.6 },
+  'Banana': { kc: [0.5, 1.1, 1.0], root: 0.6 },
+  'Coconut': { kc: [0.95, 1.0, 1.0], root: 1.0 },
+  'Turmeric': { kc: [0.5, 1.1, 0.7], root: 0.5 },
+  'Green Gram': { kc: [0.4, 1.05, 0.5], root: 0.5 },
+  'Black Gram': { kc: [0.4, 1.05, 0.5], root: 0.5 },
+  'Sunflower': { kc: [0.35, 1.15, 0.35], root: 0.8 },
+  'Cabbage': { kc: [0.7, 1.05, 0.95], root: 0.5 },
+  'Carrot': { kc: [0.7, 1.05, 0.95], root: 0.5 },
+  'Mango': { kc: [0.65, 0.85, 0.8], root: 1.2 }
+};
+// Volumetric water content at field capacity (fc) and wilting point (wp)
+const IRR_SOILS = {
+  sandy: { fc: 0.15, wp: 0.06 },
+  loamy: { fc: 0.27, wp: 0.12 },
+  clay:  { fc: 0.40, wp: 0.22 },
+  red:   { fc: 0.22, wp: 0.10 },
+  black: { fc: 0.42, wp: 0.24 }
+};
+const IRR_ROOT_FACTOR = { initial: 0.4, development: 0.7, mid: 1, late: 1 };
+const IRR_EFFICIENCY = { drip: 0.9, sprinkler: 0.75, flood: 0.55 };
+const LITRES_PER_MM_ACRE = 4046.86;
+
+const geoCache = new Map();
+const irrigationCache = new Map();
+const IRRIGATION_TTL = 30 * 60 * 1000;
+
+async function geocodePlace(district, state) {
+  const key = `${district}|${state}`;
+  if (geoCache.has(key)) return geoCache.get(key);
+
+  const tries = [district, String(district).replace(/^(North|South)\s+/i, ''), state];
+  for (const name of tries) {
+    if (!name) continue;
+    const u = new URL('https://geocoding-api.open-meteo.com/v1/search');
+    u.searchParams.set('name', name);
+    u.searchParams.set('count', '10');
+    u.searchParams.set('language', 'en');
+    u.searchParams.set('country_code', 'IN');
+    const r = await fetch(u, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) continue;
+    const j = await r.json();
+    const res = Array.isArray(j.results) ? j.results : [];
+    if (!res.length) continue;
+    const st = String(state || '').toLowerCase();
+    const best = res.find(x => String(x.admin1 || '').toLowerCase() === st) || res[0];
+    const out = { lat: best.latitude, lon: best.longitude, name: `${best.name}${best.admin1 ? ', ' + best.admin1 : ''}` };
+    geoCache.set(key, out);
+    return out;
+  }
+  throw new Error('Could not find this location. Please try "Use my location".');
+}
+
+async function fetchWeather(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('daily', 'et0_fao_evapotranspiration,precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min');
+  u.searchParams.set('hourly', 'soil_moisture_0_to_7cm,soil_moisture_7_to_28cm');
+  u.searchParams.set('current', 'temperature_2m,relative_humidity_2m,wind_speed_10m');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '7');
+
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.daily) throw new Error(j.reason || 'Weather service returned an error.');
+
+  const hr = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date())) % 24;
+  const a = j.hourly && j.hourly.soil_moisture_0_to_7cm ? j.hourly.soil_moisture_0_to_7cm[hr] : null;
+  const b = j.hourly && j.hourly.soil_moisture_7_to_28cm ? j.hourly.soil_moisture_7_to_28cm[hr] : null;
+  let theta = null;
+  if (a != null && b != null) theta = (7 * a + 21 * b) / 28;
+  else if (b != null) theta = b;
+  else if (a != null) theta = a;
+
+  const d = j.daily;
+  return {
+    current: j.current ? {
+      temp: j.current.temperature_2m,
+      humidity: j.current.relative_humidity_2m,
+      wind: j.current.wind_speed_10m
+    } : null,
+    soilTheta: theta,
+    daily: d.time.map((t, i) => ({
+      date: t,
+      tmax: d.temperature_2m_max[i],
+      tmin: d.temperature_2m_min[i],
+      rain: d.precipitation_sum[i] || 0,
+      rainProb: d.precipitation_probability_max ? (d.precipitation_probability_max[i] || 0) : 0,
+      et0: d.et0_fao_evapotranspiration[i] || 0
+    }))
+  };
+}
+
+// 7-day root-zone water balance. Irrigates when depletion passes the allowed limit
+// (and no significant rain is coming); refills to field capacity.
+function planIrrigation(w, o) {
+  const crop = IRR_CROPS[o.crop];
+  const soil = IRR_SOILS[o.soil];
+  const [k0, k1, k2] = crop.kc;
+  const kc = o.stage === 'initial' ? k0 : o.stage === 'development' ? (k0 + k1) / 2 : o.stage === 'late' ? k2 : k1;
+  const root = crop.root * IRR_ROOT_FACTOR[o.stage];
+  const taw = (soil.fc - soil.wp) * 1000 * root;      // total available water, mm
+  const raw = taw * (crop.p || 0.5);                  // readily available water, mm
+  const eff = IRR_EFFICIENCY[o.method];
+
+  let frac = null;
+  if (w.soilTheta != null) frac = Math.min(1, Math.max(0, (w.soilTheta - soil.wp) / (soil.fc - soil.wp)));
+  const estimated = frac === null;
+  if (estimated) frac = 0.6;
+  let dep = (1 - frac) * taw;
+
+  const days = w.daily.map(d => {
+    const etc = d.et0 * kc;
+    const effRain = d.rain >= 3 ? d.rain * 0.8 : 0;
+    dep = Math.max(0, dep + etc - effRain);
+
+    let action = 'skip', net = 0;
+    if (dep >= raw) {
+      if (d.rain >= 5 || d.rainProb >= 70) {
+        action = 'wait';
+      } else {
+        action = 'irrigate';
+        net = Math.min(dep, taw);
+        dep = Math.max(0, dep - net);
+      }
+    }
+    const gross = net / eff;
+    return {
+      date: d.date, tmax: d.tmax, tmin: d.tmin,
+      rain: +d.rain.toFixed(1), rainProb: d.rainProb,
+      et0: +d.et0.toFixed(1), etc: +etc.toFixed(1),
+      action,
+      netMm: +net.toFixed(1),
+      grossMm: +gross.toFixed(1),
+      litres: Math.round(gross * LITRES_PER_MM_ACRE * o.area)
+    };
+  });
+
+  const next = days.find(d => d.action === 'irrigate');
+  return {
+    kc: +kc.toFixed(2),
+    rootDepthM: +root.toFixed(2),
+    tawMm: Math.round(taw),
+    rawMm: Math.round(raw),
+    availablePct: Math.round(frac * 100),
+    soilEstimated: estimated,
+    days,
+    summary: {
+      today: days[0].action,
+      nextDate: next ? next.date : null,
+      weekLitres: days.reduce((s, d) => s + d.litres, 0),
+      weekMm: +days.reduce((s, d) => s + d.grossMm, 0).toFixed(1),
+      totalRain: +days.reduce((s, d) => s + d.rain, 0).toFixed(1)
+    }
+  };
+}
+
+app.post('/api/irrigation', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const crop = b.crop;
+    if (!IRR_CROPS[crop]) return res.status(400).json({ error: { message: 'Please choose a supported crop.' } });
+
+    const o = {
+      crop,
+      stage: IRR_ROOT_FACTOR[b.stage] ? b.stage : 'mid',
+      soil: IRR_SOILS[b.soil] ? b.soil : 'loamy',
+      method: IRR_EFFICIENCY[b.method] ? b.method : 'drip',
+      area: Math.min(1000, Math.max(0.01, Number(b.area) || 1)),
+      lang: b.lang === 'ta' ? 'ta' : 'en'
+    };
+
+    let lat = Number(b.lat), lon = Number(b.lon), place = null;
+    if (!(isFinite(lat) && isFinite(lon) && b.lat != null && b.lon != null)) {
+      if (!b.district && !b.state) return res.status(400).json({ error: { message: 'Please select a location or use your current location.' } });
+      const g = await geocodePlace(b.district, b.state);
+      lat = g.lat; lon = g.lon; place = g.name;
+    } else {
+      place = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+    }
+
+    const key = [lat.toFixed(2), lon.toFixed(2), o.crop, o.stage, o.soil, o.method, o.area, o.lang].join('|');
+    const cached = irrigationCache.get(key);
+    if (cached && Date.now() - cached.at < IRRIGATION_TTL) return res.json(cached.data);
+
+    const w = await fetchWeather(lat, lon);
+    const plan = planIrrigation(w, o);
+
+    // Short farmer-friendly tips from Gemini (optional — plan still works without it)
+    let advice = null;
+    if (GEMINI_API_KEY) {
+      try {
+        const langLine = o.lang === 'ta'
+          ? 'Write in TAMIL (தமிழ் script) only.'
+          : 'Write in simple English.';
+        const facts = {
+          crop: o.crop, stage: o.stage, soil: o.soil, method: o.method, areaAcres: o.area,
+          today: plan.summary.today, nextIrrigation: plan.summary.nextDate,
+          weekWaterMm: plan.summary.weekMm, rainNext7DaysMm: plan.summary.totalRain,
+          soilAvailableWaterPct: plan.availablePct,
+          tempNowC: w.current && w.current.temp
+        };
+        const text = await callGemini([{ text:
+`You are an agronomist advising an Indian farmer. Based ONLY on this computed irrigation plan, give 3 to 4 short practical tips (best time of day to irrigate, how to save water for this method, what to watch in this crop stage, and one rain-related tip if relevant). Do not change the schedule or invent numbers.
+${langLine}
+FORMAT: plain text, no markdown, each tip on its own line starting with "- ".
+
+Plan: ${JSON.stringify(facts)}` }], 1500);
+        advice = text.trim();
+      } catch (e) {
+        console.error('Irrigation advice failed:', e.message);
+      }
+    }
+
+    const data = { location: place, current: w.current, ...plan, advice, source: 'open-meteo' };
+    irrigationCache.set(key, { at: Date.now(), data });
+    console.log(`irrigation ${o.crop}/${o.stage}/${o.soil} @ ${place}: today=${plan.summary.today}`);
+    res.json(data);
+
+  } catch (err) {
+    console.error('Irrigation handler failed:', err.message);
+    res.status(400).json({ error: { message: err.message || 'Could not build the irrigation plan.' } });
+  }
+});
+
+/* ===================== IRRIGATION ALERTS (Web Push + Hasura DB + scheduled check) ===================== */
+// Needs env: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, HASURA_GRAPHQL_URL, HASURA_ADMIN_SECRET, CRON_SECRET
+// Needs npm package "web-push" (loaded lazily so the rest of the server still runs without it).
+const CRON_SECRET = process.env.CRON_SECRET;
+const IRR_CROP_TA = {
+  'Rice':'நெல்','Wheat':'கோதுமை','Maize':'மக்காச்சோளம்','Ragi':'கேழ்வரகு','Sugarcane':'கரும்பு','Cotton':'பருத்தி','Groundnut':'நிலக்கடலை',
+  'Tomato':'தக்காளி','Onion':'வெங்காயம்','Potato':'உருளைக்கிழங்கு','Brinjal':'கத்தரிக்காய்','Okra':'வெண்டைக்காய்','Chilli':'மிளகாய்',
+  'Banana':'வாழை','Coconut':'தென்னை','Turmeric':'மஞ்சள்','Green Gram':'பச்சைப்பயறு','Black Gram':'உளுந்து','Sunflower':'சூரியகாந்தி',
+  'Cabbage':'முட்டைக்கோஸ்','Carrot':'கேரட்','Mango':'மா'
+};
+
+let _webpush;
+function getWebPush() {
+  if (_webpush !== undefined) return _webpush;
+  try {
+    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) throw new Error('VAPID keys are not set');
+    const wp = require('web-push');
+    wp.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@agrinova.app', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+    _webpush = wp;
+  } catch (e) {
+    console.error('Web push disabled:', e.message);
+    _webpush = null;
+  }
+  return _webpush;
+}
+
+async function hasuraGql(query, variables) {
+  const clean = v => String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+  const url = clean(process.env.HASURA_GRAPHQL_URL), secret = clean(process.env.HASURA_ADMIN_SECRET);
+  if (!url || !secret) {
+    const missing = [!url && 'HASURA_GRAPHQL_URL', !secret && 'HASURA_ADMIN_SECRET'].filter(Boolean).join(' and ');
+    throw new Error('Alert storage is not configured. Missing on the server: ' + missing + '.');
+  }
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hasura-admin-secret': secret },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(15000)
+  });
+  const j = await r.json();
+  if (j.errors) throw new Error(j.errors[0].message);
+  return j.data;
+}
+
+function istNow() {
+  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()); // YYYY-MM-DD
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date())) % 24;
+  return { date, hour };
+}
+
+function normalizeAlertConfig(b) {
+  if (!b || !IRR_CROPS[b.crop]) throw new Error('Please choose a supported crop.');
+  const num = v => (v != null && v !== '' && isFinite(Number(v))) ? Number(v) : null;
+  return {
+    crop: b.crop,
+    stage: IRR_ROOT_FACTOR[b.stage] ? b.stage : 'mid',
+    soil: IRR_SOILS[b.soil] ? b.soil : 'loamy',
+    method: IRR_EFFICIENCY[b.method] ? b.method : 'drip',
+    area: Math.min(1000, Math.max(0.01, Number(b.area) || 1)),
+    lang: b.lang === 'ta' ? 'ta' : 'en',
+    lat: num(b.lat), lon: num(b.lon),
+    state: String(b.state || '').slice(0, 60),
+    district: String(b.district || '').slice(0, 60)
+  };
+}
+
+async function planForConfig(c, memo) {
+  let lat = c.lat, lon = c.lon;
+  if (lat == null || lon == null) {
+    const g = await geocodePlace(c.district, c.state);
+    lat = g.lat; lon = g.lon;
+  }
+  const wkey = lat.toFixed(2) + '|' + lon.toFixed(2);
+  if (!memo.has(wkey)) memo.set(wkey, fetchWeather(lat, lon));
+  return planIrrigation(await memo.get(wkey), c);
+}
+
+// Days between irrigations for this crop/soil (readily-available water ÷ average daily crop use)
+function cycleDays(plan) {
+  const avg = plan.days.reduce((s, d) => s + d.etc, 0) / plan.days.length;
+  return Math.max(1, Math.floor(plan.rawMm / Math.max(avg, 0.1)));
+}
+function dueByCycle(row, plan, iso) {
+  if (!row.irrigated_on) return true;
+  const next = new Date(row.irrigated_on + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + cycleDays(plan));
+  return iso >= next.toISOString().slice(0, 10);
+}
+
+// Which notification (if any) should go out right now? One per type per day.
+function decideAlert(plan, hour, row) {
+  const t = plan.days[0], n = plan.days[1];
+  let type = null;
+  if (hour >= 5 && t.action === 'irrigate' && dueByCycle(row, plan, t.date)) type = 'today';
+  else if (hour >= 5 && t.action === 'wait' && dueByCycle(row, plan, t.date)) type = 'wait';
+  else if (hour >= 16 && n && n.action === 'irrigate' && dueByCycle(row, plan, n.date)) type = 'tomorrow';
+  if (!type) return null;
+  const key = `${t.date}:${type}`;
+  return row.last_key === key ? null : { type, key };
+}
+
+function buildAlertMessage(type, plan, c) {
+  const ta = c.lang === 'ta';
+  const crop = ta ? (IRR_CROP_TA[c.crop] || c.crop) : c.crop;
+  const t = plan.days[0], n = plan.days[1];
+  if (type === 'today') return {
+    title: ta ? `💧 இன்று நீர் பாய்ச்சவும் — ${crop}` : `💧 Irrigate today — ${crop}`,
+    body: ta ? `சுமார் ${t.grossMm} மி.மீ (${c.area} ஏக்கருக்கு ${t.litres.toLocaleString('en-IN')} லிட்டர்). பாய்ச்சிய பின் "பாய்ச்சினேன்" அழுத்தவும்.`
+             : `Apply about ${t.grossMm} mm (${t.litres.toLocaleString('en-IN')} litres for ${c.area} acres). Tap "Irrigated" when done.`,
+    canDone: true, doneLabel: ta ? '✅ பாய்ச்சினேன்' : '✅ Irrigated'
+  };
+  if (type === 'wait') return {
+    title: ta ? `🌧️ நீர் பாய்ச்ச வேண்டாம் — ${crop}` : `🌧️ Hold irrigation — ${crop}`,
+    body: ta ? `மண் காய்ந்து வருகிறது, ஆனால் மழை வர வாய்ப்பு உள்ளது (${t.rain} மி.மீ, ${t.rainProb}%). நாளை பார்க்கவும்.`
+             : `Soil is drying but rain is likely (${t.rain} mm, ${t.rainProb}% chance). Check again tomorrow.`
+  };
+  return {
+    title: ta ? `⏰ நாளை நீர்ப்பாசனம் தேவை — ${crop}` : `⏰ Irrigation due tomorrow — ${crop}`,
+    body: ta ? `நாளை சுமார் ${n.grossMm} மி.மீ (${n.litres.toLocaleString('en-IN')} லிட்டர்) தேவைப்படும். தயாராக இருங்கள்.`
+             : `About ${n.grossMm} mm (${n.litres.toLocaleString('en-IN')} litres) will be needed tomorrow. Get ready.`
+  };
+}
+
+async function pushTo(row, payload) {
+  const wp = getWebPush();
+  if (!wp) throw new Error('Web push is not configured on the server.');
+  try {
+    await wp.sendNotification(row.subscription, JSON.stringify(Object.assign({ url: 'irrigation.html', tag: 'irrigation' }, payload)), { TTL: 6 * 3600 });
+    return true;
+  } catch (e) {
+    if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
+      await hasuraGql(`mutation($e:String!){delete_agri_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      return false;
+    }
+    throw e;
+  }
+}
+
+let alertRunBusy = false;
+async function runIrrigationChecks() {
+  if (alertRunBusy) return { skipped: true };
+  alertRunBusy = true;
+  const stats = { subscribers: 0, sent: 0, removed: 0, errors: 0 };
+  try {
+    const data = await hasuraGql(`query { agri_irrigation_alerts { id endpoint subscription config last_key irrigated_on } }`);
+    const rows = data.agri_irrigation_alerts || [];
+    stats.subscribers = rows.length;
+    const { hour } = istNow();
+    const memo = new Map();
+    for (const row of rows) {
+      try {
+        const c = normalizeAlertConfig(row.config);
+        const plan = await planForConfig(c, memo);
+        const d = decideAlert(plan, hour, row);
+        if (!d) continue;
+        const ok = await pushTo(row, Object.assign({ tag: 'irrigation-' + d.type }, buildAlertMessage(d.type, plan, c)));
+        if (!ok) { stats.removed++; continue; }
+        await hasuraGql(`mutation($id:Int!,$k:String!){update_agri_irrigation_alerts_by_pk(pk_columns:{id:$id},_set:{last_key:$k}){id}}`, { id: row.id, k: d.key });
+        stats.sent++;
+      } catch (e) {
+        stats.errors++;
+        console.error('Alert check failed for one subscriber:', e.message);
+      }
+    }
+  } finally {
+    alertRunBusy = false;
+  }
+  console.log('irrigation alert run:', JSON.stringify(stats));
+  return stats;
+}
+
+app.get('/api/push/public-key', (req, res) => {
+  if (!process.env.VAPID_PUBLIC_KEY) return res.status(503).json({ error: { message: 'Alerts are not set up on the server yet.' } });
+  res.json({ key: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/irrigation/subscribe', async (req, res) => {
+  try {
+    const { subscription, config } = req.body || {};
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: { message: 'Invalid notification subscription.' } });
+    }
+    if (!getWebPush()) return res.status(503).json({ error: { message: 'Alerts are not set up on the server yet.' } });
+    const c = normalizeAlertConfig(config);
+
+    await hasuraGql(
+      `mutation($o: agri_irrigation_alerts_insert_input!){
+         insert_agri_irrigation_alerts_one(object:$o, on_conflict:{constraint: irrigation_alerts_endpoint_key, update_columns:[subscription, config]}){ id }
+       }`,
+      { o: { endpoint: subscription.endpoint, subscription, config: c } }
+    );
+
+    const ta = c.lang === 'ta';
+    pushTo({ subscription, endpoint: subscription.endpoint }, {
+      tag: 'irrigation-welcome',
+      title: ta ? '🔔 நீர்ப்பாசன அறிவிப்புகள் இயக்கப்பட்டன' : '🔔 Irrigation alerts are on',
+      body: ta ? `${IRR_CROP_TA[c.crop] || c.crop} பயிருக்கு நீர் பாய்ச்ச வேண்டிய நேரத்தில் தெரிவிப்போம்.`
+               : `We'll notify you when your ${c.crop} needs water.`
+    }).catch(e => console.error('Welcome push failed:', e.message));
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Subscribe failed:', e.message);
+    res.status(400).json({ error: { message: e.message || 'Could not turn on alerts.' } });
+  }
+});
+
+app.post('/api/irrigation/unsubscribe', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!){delete_agri_irrigation_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
+  }
+});
+
+// Farmer tapped "Irrigated": pause reminders for one irrigation cycle
+app.post('/api/irrigation/done', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!,$d:String!){update_agri_irrigation_alerts(where:{endpoint:{_eq:$e}},_set:{irrigated_on:$d}){affected_rows}}`,
+      { e: endpoint, d: istNow().date });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not save.' } });
+  }
+});
+
+// Called by an external scheduler (cron-job.org) every ~30 min — this also keeps Render awake.
+app.all('/api/irrigation/check', async (req, res) => {
+  if (!CRON_SECRET || req.query.secret !== CRON_SECRET) return res.status(401).json({ error: { message: 'Unauthorized.' } });
+  try {
+    res.json(await runIrrigationChecks());
+  } catch (e) {
+    console.error('Alert run failed:', e.message);
+    res.status(400).json({ error: { message: e.message } });
+  }
+});
+
+// Backup scheduler while the server is awake
+if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
+  setInterval(() => { runIrrigationChecks().catch(e => console.error('Scheduled alert run failed:', e.message)); }, 30 * 60 * 1000);
+}
+
+/* ===================== WEATHER ALERTS (daily weather message, rain push + email, hourly water reminder) ===================== */
+// Used by weather.html "Notifications" card.
+// Needs: Hasura table "agri_weather_alerts" (columns incl. last_daily_key text), and for emails
+// BREVO_API_KEY + EMAIL_FROM (Render free blocks SMTP) or SMTP_USER + SMTP_PASS (Gmail, paid plans / local PC).
+let _mailer;
+function getMailer() {
+  if (_mailer !== undefined) return _mailer;
+  try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) throw new Error('SMTP_USER / SMTP_PASS are not set');
+    const nodemailer = require('nodemailer');
+    _mailer = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
+  } catch (e) {
+    console.error('Email disabled:', e.message);
+    _mailer = null;
+  }
+  return _mailer;
+}
+
+async function pushWeather(row, payload) {
+  const wp = getWebPush();
+  if (!wp) return true;
+  try {
+    await wp.sendNotification(row.subscription,
+      JSON.stringify(Object.assign({ url: 'weather.html' }, payload)), { TTL: 3600 });
+    return true;
+  } catch (e) {
+    if (e.statusCode === 404 || e.statusCode === 410) {   // subscription expired / user revoked
+      await hasuraGql(`mutation($e:String!){delete_agri_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: row.endpoint });
+      return false;
+    }
+    throw e;
+  }
+}
+
+/* ---- Sending email. Render FREE blocks SMTP ports (25/465/587), so Gmail/nodemailer cannot work there.
+   Use an HTTPS mail API instead: set BREVO_API_KEY + EMAIL_FROM (a sender address verified in Brevo) on Render.
+   If BREVO_API_KEY is not set, it falls back to Gmail SMTP (works only on paid Render plans / your own PC). */
+const emailConfigured = () => !!String(process.env.BREVO_API_KEY || '').trim() || !!getMailer();
+async function sendMail({ to, subject, text, fromName }) {
+  const brevoKey = String(process.env.BREVO_API_KEY || '').trim();
+  const from = String(process.env.EMAIL_FROM || process.env.SMTP_USER || '').trim();
+  if (brevoKey) {
+    if (!from) throw new Error('EMAIL_FROM is not set on the server.');
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': brevoKey, 'Content-Type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ sender: { name: fromName || 'Agrinova Weather', email: from }, to: [{ email: to }], subject, textContent: text }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error('Email service error: ' + (j.message || r.status));
+    }
+    return;
+  }
+  const mailer = getMailer();
+  if (!mailer) throw new Error('Email sending is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).');
+  await mailer.sendMail({ from: `"Agrinova Weather" <${process.env.SMTP_USER}>`, to, subject, text });
+}
+
+/* ---------- Email verification (6-digit code) for weather alerts ---------- */
+// The farmer types an email -> we mail a 6-digit code -> they enter it -> we hand back a signed
+// token (valid 30 days). /api/weather-alerts/subscribe only accepts an email that has such a token,
+// so rain emails can only go to addresses the farmer really owns.
+// Set EMAIL_VERIFY_SECRET on Render (any long random text) so tokens stay valid after a restart.
+const crypto = require('crypto');
+const MAIL_SECRET = process.env.EMAIL_VERIFY_SECRET || process.env.CRON_SECRET || process.env.HASURA_ADMIN_SECRET || crypto.randomBytes(32).toString('hex');
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+const emailCodes = new Map(); // email -> { hash, exp, tries, sends:[timestamps] }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of emailCodes) if ((!v.exp || v.exp < now) && !v.sends.some(t => now - t < 3600000)) emailCodes.delete(k);
+}, 10 * 60 * 1000);
+
+const codeHash = (email, code) => crypto.createHash('sha256').update(email + '|' + code + '|' + MAIL_SECRET).digest('hex');
+function signEmail(email, ttlMs) {
+  const p = Buffer.from(email.toLowerCase() + '|' + (Date.now() + ttlMs)).toString('base64url');
+  return p + '.' + crypto.createHmac('sha256', MAIL_SECRET).update(p).digest('base64url');
+}
+function checkEmailToken(email, token) {
+  try {
+    const [p, sig] = String(token || '').split('.');
+    if (!p || !sig) return false;
+    const good = crypto.createHmac('sha256', MAIL_SECRET).update(p).digest('base64url');
+    const a = Buffer.from(sig), b = Buffer.from(good);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+    const [em, exp] = Buffer.from(p, 'base64url').toString().split('|');
+    return em === String(email).toLowerCase() && Number(exp) > Date.now();
+  } catch (e) { return false; }
+}
+
+app.post('/api/weather-alerts/email/send-code', async (req, res) => {
+  try {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email.length > 120) return res.status(400).json({ error: { message: 'Enter a valid email address.' } });
+    if (!emailConfigured()) return res.status(503).json({ error: { message: 'Email is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).' } });
+
+    const now = Date.now();
+    const rec = emailCodes.get(email) || { sends: [], hash: null, exp: 0, tries: 0 };
+    rec.sends = rec.sends.filter(t => now - t < 3600000);
+    if (rec.sends.length && now - rec.sends[rec.sends.length - 1] < 30000) {
+      return res.status(429).json({ error: { message: 'Please wait 30 seconds before asking for a new code.' } });
+    }
+    if (rec.sends.length >= 5) {
+      return res.status(429).json({ error: { message: 'Too many codes requested for this email. Try again in an hour.' } });
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    await sendMail({
+      to: email,
+      subject: `Your Agrinova verification code: ${code}`,
+      text: `Your Agrinova verification code is ${code}.\n\nIt works for 10 minutes. If you did not ask for this, you can ignore this email.`
+    });
+    rec.sends.push(now); rec.hash = codeHash(email, code); rec.exp = now + 10 * 60 * 1000; rec.tries = 0;
+    emailCodes.set(email, rec);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Send verification code failed:', e.message);
+    const known = /^(Email service|EMAIL_FROM|Email sending)/.test(e.message || '');
+    res.status(400).json({ error: { message: known ? e.message : 'Could not send the email. Please check the address and try again.' } });
+  }
+});
+
+app.post('/api/weather-alerts/email/verify-code', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').trim();
+  const rec = emailCodes.get(email);
+  if (!rec || !rec.hash || rec.exp < Date.now()) return res.status(400).json({ error: { message: 'This code has expired. Please ask for a new one.' } });
+  if (rec.tries >= 5) { rec.hash = null; return res.status(400).json({ error: { message: 'Too many wrong attempts. Please ask for a new code.' } }); }
+  rec.tries++;
+  if (codeHash(email, code) !== rec.hash) return res.status(400).json({ error: { message: 'Wrong code. Please check and try again.' } });
+  rec.hash = null; // single use
+  res.json({ ok: true, token: signEmail(email, 30 * 24 * 3600 * 1000) });
+});
+
+/* ---------- Today's weather message (sunny / cloudy / rain / storm / heat) ---------- */
+async function fetchDayForecast(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '1');
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.daily) throw new Error('Weather service error.');
+  const d = j.daily;
+  return {
+    code: d.weather_code[0],
+    hi: Math.round(d.temperature_2m_max[0]),
+    lo: Math.round(d.temperature_2m_min[0]),
+    mm: +(d.precipitation_sum[0] || 0).toFixed(1),
+    prob: d.precipitation_probability_max ? (d.precipitation_probability_max[0] || 0) : 0,
+    wind: Math.round(d.wind_speed_10m_max[0] || 0)
+  };
+}
+
+function dayMessage(f, place) {
+  const where = place || 'your area';
+  const wet = (f.code >= 51 && f.code <= 67) || (f.code >= 80 && f.code <= 82) || f.prob >= 60 || f.mm >= 2;
+  if (f.code >= 95) return { kind: 'storm', title: `⛈️ Thunderstorm expected near ${where}`,
+    body: `Thunderstorm likely today (about ${f.mm} mm). Stay out of open fields, hold spraying, and keep harvested produce covered.` };
+  if (wet) return { kind: 'rain', title: `🌧️ Rain expected today near ${where}`,
+    body: `${f.prob}% chance of rain, about ${f.mm} mm. High ${f.hi}°, low ${f.lo}°. Hold spraying and fertiliser, clear field drains, and cover harvested produce.` };
+  if (f.hi >= 36) return { kind: 'hot', title: `🔥 Hot day near ${where}`,
+    body: `High of ${f.hi}° today. Irrigate early morning or late evening, mulch young plants, and avoid midday field work.` };
+  if (f.code <= 1) return { kind: 'sunny', title: `☀️ Sunny day near ${where}`,
+    body: `Clear skies, high ${f.hi}°, low ${f.lo}°. Good day for harvesting and drying produce. ${f.wind < 15 ? 'Low wind, so spraying is fine in the morning or evening.' : `It is windy (${f.wind} km/h), so skip spraying.`} Water crops early morning.` };
+  return { kind: 'cloudy', title: `⛅ Cloudy day near ${where}`,
+    body: `Mostly cloudy, high ${f.hi}°, low ${f.lo}°. Comfortable for field work. Rain chance is low (${f.prob}%), but watch for updates.` };
+}
+
+app.post('/api/weather-alerts/subscribe', async (req, res) => {
+  try {
+    const { subscription, email, emailToken, lat, lon, place, rain, water } = req.body || {};
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    if (!subscription || !subscription.endpoint) return res.status(400).json({ error: { message: 'Invalid subscription.' } });
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: { message: 'Enter a valid email.' } });
+    if (cleanEmail && !checkEmailToken(cleanEmail, emailToken)) return res.status(400).json({ error: { message: 'Please verify your email address first.' } });
+    if (!isFinite(Number(lat)) || !isFinite(Number(lon))) return res.status(400).json({ error: { message: 'Missing location.' } });
+
+    const prev = await hasuraGql(`query($e:String!){ agri_weather_alerts(where:{endpoint:{_eq:$e}}){ email } }`, { e: subscription.endpoint });
+    const before = prev.agri_weather_alerts[0];
+    const isNew = !before;
+    const emailChanged = !before || (before.email || '') !== cleanEmail;
+
+    const wxRow = { endpoint: subscription.endpoint, subscription, email: cleanEmail || null,
+                    lat: Number(lat), lon: Number(lon), place: String(place || '').slice(0, 80),
+                    rain_on: rain !== false, water_on: water !== false };
+    if (before) {
+      // already subscribed: update it (no unique-constraint name needed)
+      const { endpoint: _ep, ...changes } = wxRow;
+      await hasuraGql(
+        `mutation($e:String!,$s:agri_weather_alerts_set_input!){ update_agri_weather_alerts(where:{endpoint:{_eq:$e}}, _set:$s){ affected_rows } }`,
+        { e: subscription.endpoint, s: changes });
+    } else {
+      await hasuraGql(
+        `mutation($o: agri_weather_alerts_insert_input!){ insert_agri_weather_alerts_one(object:$o){ id } }`,
+        { o: wxRow });
+    }
+
+    // Welcome push only the first time (not on every page load)
+    if (isNew) {
+      pushWeather({ subscription, endpoint: subscription.endpoint },
+        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and hourly water reminders are now active.' })
+        .catch(e => console.error('Welcome push failed:', e.message));
+    }
+
+    // Welcome email when alerts are turned on, or when the email was changed
+    if (cleanEmail && emailChanged && emailConfigured()) {
+      const where = String(place || 'your area').slice(0, 80);
+      fetchDayForecast(Number(lat), Number(lon)).then(f => {
+        const m = dayMessage(f, where);
+        return sendMail({
+          to: cleanEmail,
+          subject: '🔔 Agrinova weather alerts are on',
+          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Hourly water reminders on your phone (6 AM to 8 PM)\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
+        });
+      }).catch(e => console.error('Welcome email failed:', e.message));
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Weather subscribe failed:', e.message);
+    res.status(400).json({ error: { message: e.message || 'Could not turn on alerts.' } });
+  }
+});
+
+app.post('/api/weather-alerts/unsubscribe', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(`mutation($e:String!){delete_agri_weather_alerts(where:{endpoint:{_eq:$e}}){affected_rows}}`, { e: endpoint });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
+  }
+});
+
+async function fetchRainForecast(lat, lon) {
+  const u = new URL('https://api.open-meteo.com/v1/forecast');
+  u.searchParams.set('latitude', lat);
+  u.searchParams.set('longitude', lon);
+  u.searchParams.set('hourly', 'precipitation_probability,precipitation');
+  u.searchParams.set('timezone', 'Asia/Kolkata');
+  u.searchParams.set('forecast_days', '2');
+  const r = await fetch(u, { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!r.ok || !j.hourly) throw new Error('Weather service error.');
+  return j.hourly;
+}
+
+let wxBusy = false;
+async function runWeatherAlerts() {
+  if (wxBusy) return { skipped: true };
+  wxBusy = true;
+  const stats = { subscribers: 0, daily: 0, rain: 0, water: 0, emails: 0, errors: 0 };
+  try {
+    const data = await hasuraGql(`query { agri_weather_alerts { id endpoint subscription email lat lon place rain_on water_on last_rain_key last_water_key last_daily_key } }`);
+    const rows = data.agri_weather_alerts || [];
+    stats.subscribers = rows.length;
+    const { date, hour } = istNow();
+    const nowKey = `${date}T${String(hour).padStart(2, '0')}:00`;
+    const memo = new Map();
+
+    for (const row of rows) {
+      try {
+        const set = {};
+        const rainKey = `${date}:${Math.floor(hour / 3)}`;
+
+        // Morning weather message (sunny / cloudy / rain / heat): push + email, once per day, 6 AM to 11 AM IST
+        if (row.rain_on && hour >= 6 && hour <= 11 && row.last_daily_key !== date) {
+          const dk = 'd|' + row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
+          if (!memo.has(dk)) memo.set(dk, fetchDayForecast(row.lat, row.lon));
+          const m = dayMessage(await memo.get(dk), row.place);
+          const ok = await pushWeather(row, { tag: 'wx-daily', title: m.title, body: m.body });
+          if (ok) {
+            set.last_daily_key = date; stats.daily++;
+            if (m.kind === 'rain' || m.kind === 'storm') { set.last_rain_key = rainKey; row.last_rain_key = rainKey; } // avoid a second rain mail right after
+            if (row.email && emailConfigured()) {
+              sendMail({ to: row.email, subject: m.title, text: `${m.body}\n\nOpen Agrinova Weather for the full forecast.` })
+                .then(() => { stats.emails++; }).catch(e => console.error('Daily email failed:', e.message));
+            }
+          }
+        }
+
+        // Rain alert: push + email, once per 3-hour block
+        if (row.rain_on) {
+          const k = row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
+          if (!memo.has(k)) memo.set(k, fetchRainForecast(row.lat, row.lon));
+          const h = await memo.get(k);
+          const i = h.time.indexOf(nowKey);
+          if (i >= 0) {
+            let maxP = 0, mm = 0, startAt = null;
+            for (let x = i; x < Math.min(i + 3, h.time.length); x++) {
+              const p = h.precipitation_probability[x] || 0;
+              if (p >= 60 || (h.precipitation[x] || 0) >= 0.5) { if (!startAt) startAt = h.time[x].slice(11, 16); }
+              maxP = Math.max(maxP, p); mm += h.precipitation[x] || 0;
+            }
+            if (startAt && row.last_rain_key !== rainKey) {
+              const place = row.place || 'your area';
+              const title = `🌧️ Rain expected near ${place}`;
+              const body = `${maxP}% chance of rain, about ${mm.toFixed(1)} mm in the next 3 hours (from ${startAt}). Hold spraying and fertiliser, and clear field drains.`;
+              const ok = await pushWeather(row, { tag: 'wx-rain', title, body });
+              if (ok) {
+                set.last_rain_key = rainKey; stats.rain++;
+                if (row.email && emailConfigured()) {
+                  sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` })
+                    .then(() => { stats.emails++; }).catch(e => console.error('Rain email failed:', e.message));
+                }
+              }
+            }
+          }
+        }
+
+        // Hourly water reminder: push only, 6 AM to 8 PM IST
+        const waterKey = `${date}:${hour}`;
+        if (row.water_on && hour >= 6 && hour <= 20 && row.last_water_key !== waterKey) {
+          const ok = await pushWeather(row, {
+            tag: 'wx-water', title: '💧 Water reminder',
+            body: 'Time to check your crop water. Check soil moisture and irrigate if the soil is dry.'
+          });
+          if (ok) { set.last_water_key = waterKey; stats.water++; }
+        }
+
+        if (Object.keys(set).length) {
+          await hasuraGql(`mutation($id:Int!,$s:agri_weather_alerts_set_input!){update_agri_weather_alerts_by_pk(pk_columns:{id:$id},_set:$s){id}}`, { id: row.id, s: set });
+        }
+      } catch (e) {
+        stats.errors++;
+        console.error('Weather alert failed for one subscriber:', e.message);
+      }
+    }
+  } finally { wxBusy = false; }
+  console.log('weather alert run:', JSON.stringify(stats));
+  return stats;
+}
+
+// cron-job.org: call every 15 min -> /api/weather-alerts/check?secret=YOUR_CRON_SECRET
+app.all('/api/weather-alerts/check', async (req, res) => {
+  if (!CRON_SECRET || req.query.secret !== CRON_SECRET) return res.status(401).json({ error: { message: 'Unauthorized.' } });
+  try { res.json(await runWeatherAlerts()); }
+  catch (e) { res.status(400).json({ error: { message: e.message } }); }
+});
+if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
+  setInterval(() => { runWeatherAlerts().catch(e => console.error('Weather run failed:', e.message)); }, 15 * 60 * 1000);
+}
+
+/* Debug helper: open /api/price-debug?state=Tamil%20Nadu&crop=Tomato in the browser
+   to see exactly what Agmarknet returns and why live data is or isn't used. */
+app.get('/api/price-debug', async (req, res) => {
+  const state = req.query.state || 'Tamil Nadu';
+  const crop = req.query.crop || 'Tomato';
+  const names = AGMARK_NAMES[crop] || null;
+  const out = {
+    hasDataGovKey: !!DATA_GOV_API_KEY,
+    hasGeminiKey: !!GEMINI_API_KEY,
+    state, crop,
+    agmarknetNames: names,
+    tries: []
+  };
+  for (const name of (names || [])) {
+    try {
+      const recs = await fetchAgmark(state, name);
+      out.tries.push({
+        commodity: name,
+        records: recs.length,
+        latestDate: recs.length ? recs.map(r => r.arrival_date).sort().pop() : null,
+        sample: recs[0] || null
+      });
+    } catch (e) {
+      out.tries.push({ commodity: name, error: e.message });
+    }
+  }
+  res.json(out);
+});
+
+/* ===================== PASSWORD RESET CODE (OTP) EMAIL (used by forgot.html) ===================== */
+// forgot.html asks for a 6-digit code here, the farmer types it in, and only after the code is
+// verified does the page let them set a new password. Uses the same Brevo setup as the weather emails.
+const resetCodes = new Map(); // email -> { hash, exp, tries, sends:[timestamps] }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of resetCodes) if ((!v.exp || v.exp < now) && !v.sends.some(t => now - t < 3600000)) resetCodes.delete(k);
+}, 10 * 60 * 1000);
+app.use('/api/auth', rateLimit(10, 60 * 1000));
+const resetHash = (email, code) => crypto.createHash('sha256').update('reset|' + email + '|' + code + '|' + MAIL_SECRET).digest('hex');
+
+app.post('/api/auth/send-reset-code', async (req, res) => {
+  try {
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    const name = String((req.body && req.body.name) || '').trim().replace(/[\r\n]/g, ' ').slice(0, 60);
+    if (!EMAIL_RE.test(email) || email.length > 120) return res.status(400).json({ error: { message: 'Enter a valid email address.' } });
+    if (!emailConfigured()) return res.status(503).json({ error: { message: 'Email is not set up on the server yet (BREVO_API_KEY / EMAIL_FROM).' } });
+
+    const now = Date.now();
+    const rec = resetCodes.get(email) || { sends: [], hash: null, exp: 0, tries: 0 };
+    rec.sends = rec.sends.filter(t => now - t < 3600000);
+    if (rec.sends.length && now - rec.sends[rec.sends.length - 1] < 30000) {
+      return res.status(429).json({ error: { message: 'Please wait 30 seconds before asking for a new code.' } });
+    }
+    if (rec.sends.length >= 5) {
+      return res.status(429).json({ error: { message: 'Too many codes requested for this email. Try again in an hour.' } });
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    await sendMail({
+      to: email,
+      fromName: 'Smart Agriculture',
+      subject: `Your Smart Agriculture password reset code: ${code}`,
+      text: `Hi ${name || 'there'},\n\nYour password reset code is ${code}.\n\nIt works for 10 minutes. If you did not ask to reset your password, you can ignore this email and your password will stay the same.`
+    });
+    rec.sends.push(now); rec.hash = resetHash(email, code); rec.exp = now + 10 * 60 * 1000; rec.tries = 0;
+    resetCodes.set(email, rec);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Send reset code failed:', e.message);
+    const known = /^(Email service|EMAIL_FROM|Email sending)/.test(e.message || '');
+    res.status(400).json({ error: { message: known ? e.message : 'Could not send the email. Please try again.' } });
+  }
+});
+
+app.post('/api/auth/verify-reset-code', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').trim();
+  const rec = resetCodes.get(email);
+  if (!rec || !rec.hash || rec.exp < Date.now()) return res.status(400).json({ error: { message: 'This code has expired. Please ask for a new one.' } });
+  if (rec.tries >= 5) { rec.hash = null; return res.status(400).json({ error: { message: 'Too many wrong attempts. Please ask for a new code.' } }); }
+  rec.tries++;
+  if (resetHash(email, code) !== rec.hash) return res.status(400).json({ error: { message: 'Wrong code. Please check and try again.' } });
+  rec.hash = null; // single use
+  res.json({ ok: true });
+});
+
+/* ===================== CHAT HISTORY (Hasura tables: chats + chat_messages) ===================== */
+// chatbot.html calls these routes (instead of talking to Hasura directly), so Hasura is only
+// reached with the admin secret from here — no public database permissions needed, and each
+// farmer only sees their own chats. "owner" = the farmer's email, or a random per-browser id.
+// All routes are GET/POST only, so the existing CORS settings keep working.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function chatGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  if (req.params.id) {
+    if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+    req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
+  }
+  req.owner = raw;
+  next();
+}
+
+async function ownsChat(id, owner) {
+  const d = await hasuraGql(
+    `query($id:Int!,$o:String!){ chats: agri_chats(where:{id:{_eq:$id},owner:{_eq:$o}}){ id title } }`,
+    { id, o: owner });
+  return d.chats[0] || null;
+}
+
+const chatErr = (res, e) => res.status(400).json({ error: { message: e.message || 'Chat history error.' } });
+const notFound = res => res.status(404).json({ error: { message: 'Chat not found.' } });
+
+// List this owner's chats, newest activity first
+app.get('/api/chats', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ chats: agri_chats(where:{owner:{_eq:$o}}, order_by:{updated_at:desc}, limit:50){ id title created_at } }`,
+      { o: req.owner });
+    res.json({ chats: d.chats });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Create a chat: body { owner, name?, email? }
+app.post('/api/chats', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `mutation($o:agri_chats_insert_input!){ insert_chats_one: insert_agri_chats_one(object:$o){ id title created_at } }`,
+      { o: {
+          owner: req.owner,
+          title: 'New chat',
+          farmer_name: String(req.body.name || '').slice(0, 80) || null,
+          farmer_email: String(req.body.email || '').slice(0, 120) || null
+      } });
+    res.json({ chat: d.insert_chats_one });
+  } catch (e) { chatErr(res, e); }
+});
+
+// All messages of one chat
+app.get('/api/chats/:id/messages', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
+    const d = await hasuraGql(
+      `query($id:Int!){ chat_messages: agri_chat_messages(where:{chat_id:{_eq:$id}}, order_by:{created_at:asc}, limit:500){ id sender message created_at } }`,
+      { id: req.chatId });
+    res.json({ messages: d.chat_messages });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Save messages: body { owner, messages:[{ sender:'user'|'ai', message }] }. Auto-titles a "New chat".
+app.post('/api/chats/:id/messages', chatGuard, async (req, res) => {
+  try {
+    const chat = await ownsChat(req.chatId, req.owner);
+    if (!chat) return notFound(res);
+    const objects = (Array.isArray(req.body.messages) ? req.body.messages : [])
+      .filter(m => m && (m.sender === 'user' || m.sender === 'ai') && String(m.message || '').trim())
+      .slice(0, 20)
+      .map(m => ({ chat_id: req.chatId, sender: m.sender, message: String(m.message).slice(0, 8000) }));
+    if (!objects.length) return res.json({ ok: true });
+    const set = { updated_at: 'now()' };
+    if (chat.title === 'New chat') {
+      const first = objects.find(o => o.sender === 'user');
+      if (first) set.title = first.message.replace(/\s+/g, ' ').trim().slice(0, 32);
+    }
+    await hasuraGql(
+      `mutation($o:[agri_chat_messages_insert_input!]!,$id:Int!,$s:agri_chats_set_input!){
+         insert_agri_chat_messages(objects:$o){ affected_rows }
+         update_agri_chats_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
+      { o: objects, id: req.chatId, s: set });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/chats/:id/rename', chatGuard, async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim().slice(0, 60);
+    if (!title) return res.status(400).json({ error: { message: 'Title is empty.' } });
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
+    await hasuraGql(`mutation($id:Int!,$t:String!){ update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:$t}){ id } }`,
+      { id: req.chatId, t: title });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// "Clear" button: remove the messages of this chat and reset its title
+app.post('/api/chats/:id/clear', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.chatId, req.owner))) return notFound(res);
+    await hasuraGql(
+      `mutation($id:Int!){
+         delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         update_agri_chats_by_pk(pk_columns:{id:$id}, _set:{title:"New chat"}){ id } }`,
+      { id: req.chatId });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Delete a chat and its messages
+app.post('/api/chats/:id/delete', chatGuard, async (req, res) => {
+  try {
+    if (!(await ownsChat(req.chatId, req.owner))) return res.json({ ok: true });
+    await hasuraGql(
+      `mutation($id:Int!){
+         delete_agri_chat_messages(where:{chat_id:{_eq:$id}}){ affected_rows }
+         delete_agri_chats_by_pk(id:$id){ id } }`,
+      { id: req.chatId });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Disease diagnoses history (saved through the backend, browser never touches the DB) ----
+app.use('/api/diagnoses', rateLimit(30, 60 * 1000));
+
+app.post('/api/diagnoses', chatGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const str = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
+    const int = v => (typeof v === 'number' && isFinite(v)) ? Math.round(v) : null;
+    await hasuraGql(
+      `mutation($o: agri_diagnoses_insert_input!){ insert_agri_diagnoses_one(object:$o){ id } }`,
+      { o: {
+          owner: req.owner,
+          disease_name: str(b.diseaseName, 200),
+          latin_name: str(b.latinName, 200),
+          crop: str(b.crop, 100),
+          status: str(b.status, 40),
+          confidence: int(b.confidence),
+          severity: int(b.severity),
+          description: str(b.description, 4000),
+          actions: Array.isArray(b.actions) ? b.actions.slice(0, 10).map(a => String(a).slice(0, 500)) : [],
+          note: str(b.note, 2000),
+          farmer_name: str(b.name, 80),
+          farmer_email: str(b.email, 120)
+      } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/diagnoses', chatGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ diagnoses: agri_diagnoses(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:50){ id disease_name crop status confidence severity created_at } }`,
+      { o: req.owner });
+    res.json({ diagnoses: d.diagnoses });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Owner check for endpoints whose ids are numbers (not uuids) ----
+function ownerGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  req.owner = raw;
+  next();
+}
+const numOrNull = v => (v === '' || v == null || !isFinite(Number(v))) ? null : Number(v);
+const txt = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
+
+// ---- Profit calculator history ----
+app.use(['/api/calculations', '/api/feedback'], rateLimit(30, 60 * 1000));
+
+app.get('/api/calculations', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ calculations: agri_profit_calculations(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id crop area season district expense revenue profit percentage created_at } }`,
+      { o: req.owner });
+    res.json({ calculations: d.calculations });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const d = await hasuraGql(
+      `mutation($o: agri_profit_calculations_insert_input!){ insert_agri_profit_calculations_one(object:$o){ id created_at } }`,
+      { o: {
+          owner: req.owner,
+          crop: txt(b.crop, 100), season: txt(b.season, 60), district: txt(b.district, 80),
+          area: numOrNull(b.area), expense: numOrNull(b.expense), revenue: numOrNull(b.revenue),
+          profit: numOrNull(b.profit), percentage: numOrNull(b.percentage)
+      } });
+    res.json({ id: d.insert_agri_profit_calculations_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_profit_calculations(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/calculations/clear', ownerGuard, async (req, res) => {
+  try {
+    await hasuraGql(
+      `mutation($o:String!){ delete_agri_profit_calculations(where:{owner:{_eq:$o}}){ affected_rows } }`,
+      { o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Feedback (anonymous allowed: owner falls back to "anonymous") ----
+app.post('/api/feedback', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const message = txt(b.message, 4000);
+    if (!message) return res.status(400).json({ error: { message: 'Feedback is empty.' } });
+    const rating = numOrNull(b.rating);
+    const CATS = ['general', 'suggestion', 'bug', 'compliment', 'other'];
+    const category = CATS.includes(String(b.category || '').toLowerCase()) ? String(b.category).toLowerCase() : 'general';
+    const isHelpful = typeof b.is_helpful === 'boolean' ? b.is_helpful : (rating != null ? rating >= 3 : null);
+    const base = {
+      owner: req.owner,
+      farmer_name: txt(b.name, 80),
+      module: txt(b.module, 60) || 'general',
+      rating: rating >= 1 && rating <= 5 ? Math.round(rating) : null,
+      message
+    };
+    const MUT = `mutation($o: agri_farmer_feedback_insert_input!){ insert_agri_farmer_feedback_one(object:$o){ id } }`;
+    try {
+      await hasuraGql(MUT, { o: Object.assign({}, base, { category, is_helpful: isHelpful }) });
+    } catch (e1) {
+      // If category / is_helpful columns have a different type, still save the feedback itself.
+      console.warn('Feedback: extended insert failed, retrying basic:', e1.message);
+      await hasuraGql(MUT, { o: base });
+    }
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Crop recommendation history (also logged in the activity log) ----
+app.use('/api/crop-recommendations', rateLimit(30, 60 * 1000));
+
+app.post('/api/crop-recommendations', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      soil: txt(b.soil, 40), weather: txt(b.weather, 40), water: txt(b.water, 40),
+      season: txt(b.season, 40), district: txt(b.district, 80),
+      temperature: numOrNull(b.temperature), rainfall: numOrNull(b.rainfall),
+      recommended_crop: txt(b.crop, 100), fertilizer: txt(b.fertilizer, 200),
+      irrigation: txt(b.irrigation, 100), harvest_time: txt(b.harvest, 60),
+      expected_yield: txt(b.expectedYield, 80), expected_profit: txt(b.profit, 60),
+      suitability: txt(b.suitability, 20), other_crops: txt(b.otherCrops, 200), tip: txt(b.tip, 600)
+    };
+    const log = {
+      owner: req.owner, module: 'crop_recommendation', action: 'recommend',
+      input: { soil: rec.soil, weather: rec.weather, water: rec.water, season: rec.season,
+               district: rec.district, temperature: rec.temperature, rainfall: rec.rainfall },
+      result: { crop: rec.recommended_crop, suitability: rec.suitability }
+    };
+    // both inserts run in one transaction
+    const d = await hasuraGql(
+      `mutation($r: agri_crop_advisory_records_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_crop_advisory_records_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_crop_advisory_records_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/crop-recommendations', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ recommendations: agri_crop_advisory_records(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id recommended_crop suitability soil season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
+      { o: req.owner });
+    res.json({ recommendations: d.recommendations });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Soil reports (also logged in the activity log) ----
+app.use('/api/soil-reports', rateLimit(30, 60 * 1000));
+
+app.post('/api/soil-reports', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      state: txt(b.state, 80), district: txt(b.district, 80), soil_type: txt(b.soilType, 40),
+      land_area: numOrNull(b.landArea), ph: numOrNull(b.ph),
+      nitrogen: numOrNull(b.nitrogen), phosphorus: numOrNull(b.phosphorus), potassium: numOrNull(b.potassium)
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_soil_reports_insert_input!){ insert_agri_soil_reports_one(object:$r){ id } }`,
+      { r: rec });
+    const reportId = d.insert_agri_soil_reports_one.id;
+    // activity log is secondary: it links back to the saved report, and never blocks the save
+    try {
+      await hasuraGql(
+        `mutation($l: agri_farmer_activity_log_insert_input!){ insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+        { l: {
+            owner: req.owner, module: 'soil_information', action: 'analyze',
+            input: { state: rec.state, district: rec.district, soil_type: rec.soil_type, land_area: rec.land_area,
+                     ph: rec.ph, nitrogen: rec.nitrogen, phosphorus: rec.phosphorus, potassium: rec.potassium },
+            result: { report_id: reportId, soil_type: rec.soil_type }
+        } });
+    } catch (logErr) { console.error('Activity log failed:', logErr.message); }
+    res.json({ id: reportId });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/soil-reports', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ reports: agri_soil_reports(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
+         id state district soil_type land_area ph nitrogen phosphorus potassium created_at } }`,
+      { o: req.owner });
+    res.json({ reports: d.reports });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Fertilizer advice + usage history ----
+app.use(['/api/fertilizer-advice', '/api/fertilizer-usage'], rateLimit(40, 60 * 1000));
+const dateOrNull = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : null;
+
+app.post('/api/fertilizer-advice', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      crop: txt(b.crop, 60), soil: txt(b.soil, 60), area: numOrNull(b.area),
+      n_level: txt(b.nLevel, 20), p_level: txt(b.pLevel, 20), k_level: txt(b.kLevel, 20),
+      recommended_fertilizer: txt(b.recommended, 600), quantity: txt(b.quantity, 60),
+      plan: Array.isArray(b.plan) ? b.plan.slice(0, 12).map(r => ({ fertilizer: txt(r && r.fertilizer, 80), kg: numOrNull(r && r.kg) })) : []
+    };
+    const log = {
+      owner: req.owner, module: 'fertilizer', action: 'recommend',
+      input: { crop: rec.crop, soil: rec.soil, area: rec.area, n: rec.n_level, p: rec.p_level, k: rec.k_level },
+      result: { recommended: rec.recommended_fertilizer, quantity: rec.quantity }
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_fertilizer_advisories_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_fertilizer_advisories_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_fertilizer_advisories_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/fertilizer-usage', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ usage: agri_fertilizer_usage(where:{owner:{_eq:$o}}, order_by:{id:asc}, limit:200){
+         id used_on crop_key fert_keys quantity rating notes } }`,
+      { o: req.owner });
+    res.json({ usage: d.usage });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const row = {
+      owner: req.owner,
+      crop_key: txt(b.cropV, 60),
+      fert_keys: Array.isArray(b.fertVs) ? b.fertVs.slice(0, 20).map(x => String(x).slice(0, 60)) : [],
+      quantity: txt(b.qty, 120),
+      rating: numOrNull(b.rating) || 0,
+      notes: txt(b.notes, 1000) || ''
+    };
+    const day = dateOrNull(b.date);
+    if (day) row.used_on = day;
+    const d = await hasuraGql(
+      `mutation($r: agri_fertilizer_usage_insert_input!){ insert_agri_fertilizer_usage_one(object:$r){ id } }`,
+      { r: row });
+    res.json({ id: d.insert_agri_fertilizer_usage_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage/update', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = parseInt(b.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    const rating = Math.max(0, Math.min(5, Math.round(numOrNull(b.rating) || 0)));
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!,$s: agri_fertilizer_usage_set_input!){
+         update_agri_fertilizer_usage(where:{id:{_eq:$id},owner:{_eq:$o}}, _set:$s){ affected_rows } }`,
+      { id, o: req.owner, s: { rating, notes: txt(b.notes, 1000) || '' } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/fertilizer-usage/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_fertilizer_usage(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Market price searches (also logged in the activity log) ----
+app.use('/api/market-searches', rateLimit(40, 60 * 1000));
+
+app.post('/api/market-searches', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const rec = {
+      owner: req.owner,
+      state: txt(b.state, 80), district: txt(b.district, 80), market: txt(b.market, 120), crop: txt(b.crop, 100),
+      quantity_kg: numOrNull(b.qty),
+      min_price: numOrNull(b.min), max_price: numOrNull(b.max), modal_price: numOrNull(b.modal),
+      unit: txt(b.unit, 40), source: txt(b.source, 20), price_date: txt(b.priceDate, 40)
+    };
+    const log = {
+      owner: req.owner, module: 'market_prices', action: 'view_price',
+      input: { state: rec.state, district: rec.district, market: rec.market, crop: rec.crop, quantity_kg: rec.quantity_kg },
+      result: { min: rec.min_price, max: rec.max_price, modal: rec.modal_price, unit: rec.unit, source: rec.source }
+    };
+    const d = await hasuraGql(
+      `mutation($r: agri_market_price_searches_insert_input!, $l: agri_farmer_activity_log_insert_input!){
+         insert_agri_market_price_searches_one(object:$r){ id }
+         insert_agri_farmer_activity_log_one(object:$l){ id } }`,
+      { r: rec, l: log });
+    res.json({ id: d.insert_agri_market_price_searches_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.get('/api/market-searches', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ searches: agri_market_price_searches(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:30){
+         id state district market crop quantity_kg min_price max_price modal_price unit source price_date created_at } }`,
+      { o: req.owner });
+    res.json({ searches: d.searches });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Saved government schemes (bookmarks) ----
+app.use('/api/scheme-bookmarks', rateLimit(40, 60 * 1000));
+
+app.get('/api/scheme-bookmarks', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ bookmarks: agri_scheme_bookmarks(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:100){
+         id scheme_id name category link benefits status created_at } }`,
+      { o: req.owner });
+    res.json({ bookmarks: d.bookmarks });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/scheme-bookmarks', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = txt(b.name, 200);
+    if (!name) return res.status(400).json({ error: { message: 'Scheme name is missing.' } });
+    const row = {
+      owner: req.owner,
+      scheme_id: name.toLowerCase().replace(/\s+/g, ' ').slice(0, 200),   // schemes have no id, the name is the key
+      name, category: txt(b.category, 30), link: txt(b.link, 500), benefits: txt(b.benefits, 600),
+      status: b.status === 'applied' ? 'applied' : 'saved'
+    };
+    const ex = await hasuraGql(
+      `query($o:String!,$s:String!){ agri_scheme_bookmarks(where:{owner:{_eq:$o},scheme_id:{_eq:$s}}, limit:1){ id } }`,
+      { o: row.owner, s: row.scheme_id });
+    if (ex.agri_scheme_bookmarks.length) {
+      const id = ex.agri_scheme_bookmarks[0].id;
+      await hasuraGql(
+        `mutation($id:Int!,$st:String!){ update_agri_scheme_bookmarks_by_pk(pk_columns:{id:$id}, _set:{status:$st}){ id } }`,
+        { id, st: row.status });
+      return res.json({ id });
+    }
+    const d = await hasuraGql(
+      `mutation($r: agri_scheme_bookmarks_insert_input!){ insert_agri_scheme_bookmarks_one(object:$r){ id } }`,
+      { r: row });
+    res.json({ id: d.insert_agri_scheme_bookmarks_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/scheme-bookmarks/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_scheme_bookmarks(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Farm expense log (table: agri.farm_expenses) ----
+app.use(['/api/expenses', '/api/watchlist'], rateLimit(60, 60 * 1000));
+
+app.get('/api/expenses', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ expenses: agri_farm_expenses(where:{owner:{_eq:$o}}, order_by:[{expense_date:desc},{id:desc}], limit:200){
+         id crop category amount expense_date note created_at } }`,
+      { o: req.owner });
+    res.json({ expenses: d.expenses });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const amount = numOrNull(b.amount);
+    if (amount == null || amount <= 0) return res.status(400).json({ error: { message: 'Enter a valid amount.' } });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.expense_date || '')) ? b.expense_date : new Date().toISOString().slice(0, 10);
+    const d = await hasuraGql(
+      `mutation($o: agri_farm_expenses_insert_input!){ insert_agri_farm_expenses_one(object:$o){ id } }`,
+      { o: { owner: req.owner, crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date, note: txt(b.note, 200) } });
+    res.json({ id: d.insert_agri_farm_expenses_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses/update', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = parseInt(b.id, 10);
+    const amount = numOrNull(b.amount);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    if (amount == null || amount <= 0) return res.status(400).json({ error: { message: 'Enter a valid amount.' } });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.expense_date || '')) ? b.expense_date : new Date().toISOString().slice(0, 10);
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!,$s:agri_farm_expenses_set_input!){ update_agri_farm_expenses(where:{id:{_eq:$id},owner:{_eq:$o}}, _set:$s){ affected_rows } }`,
+      { id, o: req.owner, s: { crop: txt(b.crop, 100), category: txt(b.category, 60) || 'Other', amount, expense_date: date, note: txt(b.note, 200) } });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/expenses/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_farm_expenses(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// ---- Market watchlist (table: agri.market_watchlist) ----
+app.get('/api/watchlist', ownerGuard, async (req, res) => {
+  try {
+    const d = await hasuraGql(
+      `query($o:String!){ items: agri_market_watchlist(where:{owner:{_eq:$o}}, order_by:{id:desc}, limit:50){
+         id crop state district market target_price created_at } }`,
+      { o: req.owner });
+    res.json({ items: d.items });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/watchlist', ownerGuard, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const crop = txt(b.crop, 100);
+    if (!crop) return res.status(400).json({ error: { message: 'Crop is missing.' } });
+    const market = txt(b.market, 120) || '';
+    // already there? (no unique constraint needed)
+    const ex = await hasuraGql(
+      `query($o:String!,$c:String!,$m:String!){ agri_market_watchlist(where:{owner:{_eq:$o},crop:{_eq:$c},market:{_eq:$m}}, limit:1){ id } }`,
+      { o: req.owner, c: crop, m: market });
+    if (ex.agri_market_watchlist.length) return res.json({ id: ex.agri_market_watchlist[0].id, existed: true });
+    const d = await hasuraGql(
+      `mutation($o: agri_market_watchlist_insert_input!){ insert_agri_market_watchlist_one(object:$o){ id } }`,
+      { o: { owner: req.owner, crop, market, state: txt(b.state, 80), district: txt(b.district, 80), target_price: numOrNull(b.target_price) } });
+    res.json({ id: d.insert_agri_market_watchlist_one.id });
+  } catch (e) { chatErr(res, e); }
+});
+
+app.post('/api/watchlist/delete', ownerGuard, async (req, res) => {
+  try {
+    const id = parseInt(req.body && req.body.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: { message: 'Invalid id.' } });
+    await hasuraGql(
+      `mutation($id:Int!,$o:String!){ delete_agri_market_watchlist(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
+      { id, o: req.owner });
+    res.json({ ok: true });
+  } catch (e) { chatErr(res, e); }
+});
+
+// Health check — open /api/health to see what is configured (never shows secrets)
+app.get('/api/health', async (req, res) => {
+  const out = {
+    ok: true,
+    gemini: !!GEMINI_API_KEY,
+    dataGov: !!DATA_GOV_API_KEY,
+    push: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+    email: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+    emailApi: !!String(process.env.BREVO_API_KEY || '').trim(),
+    emailFrom: !!String(process.env.EMAIL_FROM || '').trim(),
+    hasuraUrlSet: !!String(process.env.HASURA_GRAPHQL_URL || '').trim(),
+    hasuraSecretSet: !!String(process.env.HASURA_ADMIN_SECRET || '').trim(),
+    hasura: false
+  };
+  try {
+    await hasuraGql(`query { chats_aggregate { aggregate { count } } chat_messages_aggregate { aggregate { count } } }`);
+    out.hasura = true;
+  } catch (e) { out.hasuraError = e.message; }
+  res.json(out);
+});
+
+app.get('/', (req, res) => res.send('AgriNova backend is running.'));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`AgriNova backend running on port ${PORT}`));
