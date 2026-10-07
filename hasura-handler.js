@@ -8,7 +8,7 @@
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
 //   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
-//      rain alerts (push + email), welcome email, water reminder 4 times a day (push + email)
+//      max 5 messages/day: 4 water reminders + 1 rain alert (push + verified email)
 //  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
@@ -1465,7 +1465,7 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
         return sendMail({
           to: cleanEmail,
           subject: '🔔 Agrinova weather alerts are on',
-          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Water reminders 4 times a day (6 AM, 10 AM, 2 PM, 6 PM) on your phone and by email\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
+          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- Water reminders 4 times a day (6 AM, 10 AM, 2 PM, 6 PM)\n- 1 rain alert on days when rain is expected\n- That is at most 5 messages a day, sent to this email and your phone\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
         });
       }).catch(e => console.error('Welcome email failed:', e.message));
     }
@@ -1518,26 +1518,10 @@ async function runWeatherAlerts(opts = {}) {
     for (const row of rows) {
       try {
         const set = {};
-        const rainKey = `${date}:${Math.floor(hour / 3)}`;
+        const rainKey = date; // rain alert: at most ONE per day
 
-        // Morning weather message (sunny / cloudy / rain / heat): push + email, once per day, 6 AM to 11 AM IST
-        if (row.rain_on && hour >= 6 && hour <= 11 && row.last_daily_key !== date) {
-          const dk = 'd|' + row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
-          if (!memo.has(dk)) memo.set(dk, fetchDayForecast(row.lat, row.lon));
-          const m = dayMessage(await memo.get(dk), row.place);
-          const ok = await pushWeather(row, { tag: 'wx-daily', title: m.title, body: m.body });
-          if (ok) {
-            set.last_daily_key = date; stats.daily++;
-            if (m.kind === 'rain' || m.kind === 'storm') { set.last_rain_key = rainKey; row.last_rain_key = rainKey; } // avoid a second rain mail right after
-            if (row.email && emailConfigured()) {
-              sendMail({ to: row.email, subject: m.title, text: `${m.body}\n\nOpen Agrinova Weather for the full forecast.` })
-                .then(() => { stats.emails++; }).catch(e => console.error('Daily email failed:', e.message));
-            }
-          }
-        }
-
-        // Rain alert: push + email, once per 3-hour block
-        if (row.rain_on) {
+        // Rain alert: ONE message per day (phone push + verified email), sent when rain is expected in the next 3 hours
+        if (row.rain_on && row.last_rain_key !== rainKey) {
           const k = row.lat.toFixed(2) + '|' + row.lon.toFixed(2);
           if (!memo.has(k)) memo.set(k, fetchRainForecast(row.lat, row.lon));
           const h = await memo.get(k);
@@ -1549,18 +1533,20 @@ async function runWeatherAlerts(opts = {}) {
               if (p >= 60 || (h.precipitation[x] || 0) >= 0.5) { if (!startAt) startAt = h.time[x].slice(11, 16); }
               maxP = Math.max(maxP, p); mm += h.precipitation[x] || 0;
             }
-            if (startAt && row.last_rain_key !== rainKey) {
+            if (startAt) {
               const place = row.place || 'your area';
               const title = `🌧️ Rain expected near ${place}`;
               const body = `${maxP}% chance of rain, about ${mm.toFixed(1)} mm in the next 3 hours (from ${startAt}). Hold spraying and fertiliser, and clear field drains.`;
-              const ok = await pushWeather(row, { tag: 'wx-rain', title, body });
-              if (ok) {
-                set.last_rain_key = rainKey; stats.rain++;
-                if (row.email && emailConfigured()) {
-                  sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` })
-                    .then(() => { stats.emails++; }).catch(e => console.error('Rain email failed:', e.message));
-                }
+              let pushed = false, mailed = false;
+              try { pushed = await pushWeather(row, { tag: 'wx-rain', title, body }); }
+              catch (e) { console.error('Rain push failed:', e.message); }
+              if (row.email && emailConfigured()) {
+                try {
+                  await sendMail({ to: row.email, subject: title, text: `${body}\n\nOpen Agrinova Weather for the full forecast.` });
+                  mailed = true; stats.emails++;
+                } catch (e) { console.error('Rain email failed:', e.message); }
               }
+              if (pushed || mailed) { set.last_rain_key = rainKey; stats.rain++; }
             }
           }
         }
