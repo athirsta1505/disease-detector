@@ -8,7 +8,7 @@
 //   7. /api/irrigation  — irrigation advisor (Open-Meteo weather + FAO-56 water balance + Gemini tips)
 //   8. /api/irrigation/subscribe|unsubscribe|done|check + /api/push/public-key — real-time push alerts
 //   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
-//      rain alerts (push + email), welcome email, hourly water reminder
+//      rain alerts (push + email), welcome email, water reminder 4 times a day (push + email)
 //  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
@@ -1453,7 +1453,7 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
     // Welcome push only the first time (not on every page load)
     if (isNew) {
       pushWeather({ subscription, endpoint: subscription.endpoint },
-        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and hourly water reminders are now active.' })
+        { tag: 'wx-welcome', title: '🔔 Agrinova alerts on', body: 'Weather alerts and water reminders (4 times a day) are now active.' })
         .catch(e => console.error('Welcome push failed:', e.message));
     }
 
@@ -1465,7 +1465,7 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
         return sendMail({
           to: cleanEmail,
           subject: '🔔 Agrinova weather alerts are on',
-          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Hourly water reminders on your phone (6 AM to 8 PM)\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
+          text: `Hi! Agrinova weather alerts are now on for ${where}.\n\nYou will get:\n- A weather message every morning (sunny, cloudy, rain or heat) with farming tips\n- A rain alert as soon as rain is expected\n- Water reminders 4 times a day (6 AM, 10 AM, 2 PM, 6 PM) on your phone and by email\n\nToday near ${where}:\n${m.title}\n${m.body}\n\nTo change or remove this email, open Agrinova Weather > Alerts and use Edit or Remove.`
         });
       }).catch(e => console.error('Welcome email failed:', e.message));
     }
@@ -1501,8 +1501,9 @@ async function fetchRainForecast(lat, lon) {
   return j.hourly;
 }
 
+const WATER_HOURS = [6, 10, 14, 18]; // IST hours for the water reminder
 let wxBusy = false;
-async function runWeatherAlerts() {
+async function runWeatherAlerts(opts = {}) {
   if (wxBusy) return { skipped: true };
   wxBusy = true;
   const stats = { subscribers: 0, daily: 0, rain: 0, water: 0, emails: 0, errors: 0 };
@@ -1564,14 +1565,21 @@ async function runWeatherAlerts() {
           }
         }
 
-        // Hourly water reminder: push only, 6 AM to 8 PM IST
+        // Water reminder 4 times a day (6 AM, 10 AM, 2 PM, 6 PM IST): phone push AND email
         const waterKey = `${date}:${hour}`;
-        if (row.water_on && hour >= 6 && hour <= 20 && row.last_water_key !== waterKey) {
-          const ok = await pushWeather(row, {
-            tag: 'wx-water', title: '💧 Water reminder',
-            body: 'Time to check your crop water. Check soil moisture and irrigate if the soil is dry.'
-          });
-          if (ok) { set.last_water_key = waterKey; stats.water++; }
+        if (row.water_on && ((WATER_HOURS.includes(hour) && row.last_water_key !== waterKey) || opts.testWater)) {
+          const wTitle = '💧 Water reminder';
+          const wBody = 'Time to check your crop water. Check soil moisture and irrigate if the soil is dry.';
+          let pushed = false, mailed = false;
+          try { pushed = await pushWeather(row, { tag: 'wx-water', title: wTitle, body: wBody }); }
+          catch (e) { console.error('Water push failed:', e.message); }
+          if (row.email && emailConfigured()) {
+            try {
+              await sendMail({ to: row.email, subject: wTitle, text: `${wBody}\n\nOpen Agrinova Weather for the full forecast and irrigation advice.` });
+              mailed = true; stats.emails++;
+            } catch (e) { console.error('Water email failed:', e.message); }
+          }
+          if (pushed || mailed) { set.last_water_key = waterKey; stats.water++; }
         }
 
         if (Object.keys(set).length) {
@@ -1590,11 +1598,13 @@ async function runWeatherAlerts() {
 // cron-job.org: call every 15 min -> /api/weather-alerts/check?secret=YOUR_CRON_SECRET
 app.all('/api/weather-alerts/check', async (req, res) => {
   if (!CRON_SECRET || req.query.secret !== CRON_SECRET) return res.status(401).json({ error: { message: 'Unauthorized.' } });
-  try { res.json(await runWeatherAlerts()); }
+  try { res.json(await runWeatherAlerts({ testWater: req.query.test === 'water' })); }  // add &test=water to send a water reminder right now
   catch (e) { res.status(400).json({ error: { message: e.message } }); }
 });
 if (process.env.HASURA_GRAPHQL_URL && process.env.HASURA_ADMIN_SECRET && process.env.VAPID_PUBLIC_KEY) {
   setInterval(() => { runWeatherAlerts().catch(e => console.error('Weather run failed:', e.message)); }, 15 * 60 * 1000);
+  // also run once shortly after the server wakes up / restarts, so a sleeping Render server does not miss the hour
+  setTimeout(() => { runWeatherAlerts().catch(e => console.error('Weather first run failed:', e.message)); }, 30 * 1000);
 }
 
 /* Debug helper: open /api/price-debug?state=Tamil%20Nadu&crop=Tomato in the browser
