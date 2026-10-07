@@ -279,13 +279,15 @@ AgriNova Assistant:`;
 });
 
 /* ===================== GOVERNMENT SCHEMES ===================== */
-// Cached for 24 hours — this keeps page loads fast for everyone, and means
-// we only attempt the (quota-limited) Google Search grounding once a day,
-// which is far less likely to hit the free-tier quota than trying on every
-// page load. If grounding fails for any reason, we fall back immediately
-// to a plain (non-grounded) list so the page never shows an empty error.
+// FIXED: the page used to spin for a very long time because every cache miss waited for a slow
+// Gemini call (up to a minute with retries). Now:
+//   - fresh cache            -> answer instantly
+//   - stale cache            -> answer instantly with the old list, refresh in the background
+//   - no cache (cold start)  -> wait at most 12 seconds, then send a built-in basic list
+//     while Gemini keeps working in the background (the next visitor gets the full list)
+//   - the cache is also warmed when the server starts, so the first farmer rarely waits.
 let schemesCache = { data: null, updatedAt: 0 };
-const SCHEMES_CACHE_TTL = 2 * 60 * 60 * 1000;
+const SCHEMES_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 const SCHEMES_PROMPT = `You are a research assistant helping Indian farmers. List CURRENT Indian government agricultural schemes relevant to farmers — covering Central Government schemes, Tamil Nadu state government schemes, and subsidy programs.
 
@@ -306,7 +308,22 @@ Return ONLY raw JSON (no markdown fences, no preamble) in exactly this shape:
   ]
 }
 
-Include 14 to 16 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in, myscheme.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, horticulture, etc.) — and 5 to 8 recent official updates. Only include schemes and links you are confident are real — never invent a scheme name or URL. If unsure of the exact page URL for a scheme, use "https://www.myscheme.gov.in" instead of guessing.`;
+Include 10 to 12 real, currently active schemes with accurate official links (e.g. pmkisan.gov.in, agriculture.tn.gov.in, myscheme.gov.in), covering a wide range of Central schemes, Tamil Nadu state schemes, and subsidy programs (irrigation, machinery, seeds, organic farming, livestock, fisheries, horticulture, etc.) — and 3 to 5 recent official updates. Keep every text field short. Only include schemes and links you are confident are real — never invent a scheme name or URL. If unsure of the exact page URL for a scheme, use "https://www.myscheme.gov.in" instead of guessing.`;
+
+// Shown only when Gemini is too slow or unavailable, so the page is never empty.
+const SCHEMES_FALLBACK = {
+  schemes: [
+    { name: 'PM-KISAN', category: 'central', benefits: 'Income support of Rs 6,000 per year in three instalments for farmer families.', eligibility: 'Landholding farmer families, subject to exclusion criteria.', documents: 'Aadhaar, land records, bank passbook', link: 'https://pmkisan.gov.in' },
+    { name: 'Pradhan Mantri Fasal Bima Yojana (PMFBY)', category: 'central', benefits: 'Crop insurance against yield loss from natural calamities, pests and diseases.', eligibility: 'Farmers growing notified crops in notified areas.', documents: 'Aadhaar, land records, bank passbook, sowing certificate', link: 'https://pmfby.gov.in' },
+    { name: 'Kisan Credit Card (KCC)', category: 'central', benefits: 'Short-term credit for cultivation at concessional interest.', eligibility: 'Farmers, tenant farmers, sharecroppers and self-help groups.', documents: 'Aadhaar, land records, photo, bank form', link: 'https://www.myscheme.gov.in' },
+    { name: 'PM Krishi Sinchayee Yojana (PMKSY)', category: 'subsidy', benefits: 'Subsidy for drip and sprinkler irrigation ("Per Drop More Crop").', eligibility: 'Farmers with own land and a water source.', documents: 'Aadhaar, land records, bank passbook', link: 'https://pmksy.gov.in' },
+    { name: 'Soil Health Card Scheme', category: 'central', benefits: 'Free soil testing with crop-wise fertilizer recommendations.', eligibility: 'All farmers.', documents: 'Aadhaar, land details', link: 'https://soilhealth.dac.gov.in' },
+    { name: 'e-NAM (National Agriculture Market)', category: 'central', benefits: 'Online trading platform to sell produce at better prices.', eligibility: 'Farmers registered with a connected mandi.', documents: 'Aadhaar, bank passbook, mobile number', link: 'https://enam.gov.in' },
+    { name: 'Tamil Nadu Agriculture Department Schemes', category: 'tamilnadu', benefits: 'State subsidies for seeds, machinery, micro-irrigation and more.', eligibility: 'Tamil Nadu farmers; details vary by scheme.', documents: 'Aadhaar, chitta/adangal, bank passbook', link: 'https://www.tn.gov.in/department/2' }
+  ],
+  officialUpdates: [],
+  grounded: false
+};
 
 // Large scheme lists sometimes get cut off mid-response (token limit hit
 // mid-array). This tries a normal parse first, and if that fails, trims
@@ -351,6 +368,7 @@ async function fetchSchemesPlain() {
     try {
       const text = await callGemini([{ text: SCHEMES_PROMPT }], 8000);
       const parsed = parseSchemesJson(text);
+      if (!parsed || !Array.isArray(parsed.schemes) || !parsed.schemes.length) throw new Error('Model returned no schemes.');
       parsed.grounded = false;
       return parsed;
     } catch (e) {
@@ -362,41 +380,42 @@ async function fetchSchemesPlain() {
   throw lastErr;
 }
 
+// Only one Gemini call at a time, even if many farmers open the page together.
+let schemesInflight = null;
+function refreshSchemes() {
+  if (schemesInflight) return schemesInflight;
+  schemesInflight = fetchSchemesPlain()
+    .then(p => {
+      p.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+      schemesCache = { data: p, updatedAt: Date.now() };
+      return p;
+    })
+    .finally(() => { schemesInflight = null; });
+  return schemesInflight;
+}
+
 app.get('/api/schemes', async (req, res) => {
   try {
-    const now = Date.now();
-    if (schemesCache.data && (now - schemesCache.updatedAt) < SCHEMES_CACHE_TTL) {
+    const age = Date.now() - schemesCache.updatedAt;
+    if (schemesCache.data && age < SCHEMES_CACHE_TTL) return res.json(schemesCache.data);
+
+    if (schemesCache.data) {                       // stale: answer now, refresh in the background
+      refreshSchemes().catch(e => console.error('Background schemes refresh failed:', e.message));
       return res.json(schemesCache.data);
     }
-    if (!GEMINI_API_KEY) {
-      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
-    }
+    if (!GEMINI_API_KEY) return res.json({ ...SCHEMES_FALLBACK, lastUpdated: 'Offline list' });
 
-    let parsed;
-    try {
-      // Search grounding hits the free-tier quota too easily when combined
-      // with everything else the app calls, so we go straight to the
-      // reliable plain list — one request instead of up to three.
-      parsed = await fetchSchemesPlain();
-    } catch (e) {
-      console.error('Schemes fetch failed after retry:', e.message);
-      // If we have a stale cached copy, serve that rather than failing —
-      // an older list beats no list at all.
-      if (schemesCache.data) {
-        return res.json(schemesCache.data);
-      }
-      return res.status(400).json({ error: { message: e.message || 'Could not fetch scheme data. Please try again in a moment.' } });
-    }
-
-    parsed.lastUpdated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-    schemesCache = { data: parsed, updatedAt: now };
-    res.json(parsed);
-
+    const p = refreshSchemes().catch(e => { console.error('Schemes fetch failed:', e.message); return null; });
+    const result = await Promise.race([p, sleep(12000).then(() => null)]);
+    res.json(result || { ...SCHEMES_FALLBACK, lastUpdated: 'Basic list (full list is loading, refresh in a minute)' });
   } catch (err) {
     console.error('Schemes handler crashed:', err);
-    res.status(400).json({ error: { message: 'Server error while fetching schemes.' } });
+    res.json({ ...SCHEMES_FALLBACK, lastUpdated: 'Basic list' });
   }
 });
+
+// Warm the cache when the server starts, so the first farmer doesn't wait.
+if (GEMINI_API_KEY) refreshSchemes().catch(() => {});
 
 /* ===================== FERTILIZER RECOMMENDATION (AI-powered) ===================== */
 app.post('/api/fertilizer', async (req, res) => {
@@ -2272,6 +2291,7 @@ app.get('/api/health', async (req, res) => {
     emailFrom: !!String(process.env.EMAIL_FROM || '').trim(),
     hasuraUrlSet: !!String(process.env.HASURA_GRAPHQL_URL || '').trim(),
     hasuraSecretSet: !!String(process.env.HASURA_ADMIN_SECRET || '').trim(),
+    schemesCached: !!schemesCache.data,
     hasura: false
   };
   try {
