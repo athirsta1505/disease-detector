@@ -60,54 +60,95 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 // Used only when the main model keeps answering "high demand" (503/429) or is unavailable (404).
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
 
-// Calls Gemini; retries busy errors (429/500/503/504) with a short wait, then tries the fallback model.
-// A 404 (model no longer available) also jumps straight to the next model in the plan.
-async function geminiFetch(body, timeoutMs) {
+// Calls Gemini; retries busy errors / slow responses with a short wait, then tries the fallback model.
+// A 404 (model no longer available) jumps straight to the fallback model.
+// opts.fast = ask the model to skip "thinking" (MUCH faster for chat). If a model rejects that
+// setting, the call is repeated without it. The whole call gives up after ~55 seconds.
+async function geminiFetch(body, timeoutMs, opts = {}) {
   const busy = new Set([429, 500, 502, 503, 504]);
   const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
     .filter((m, i, a) => m && (i < 2 || a[0] !== m));
+  const deadline = Date.now() + (opts.totalMs || 55000);
+  let thinkingOff = !!opts.fast;
   let firstData = null, firstStatus = 0;
   for (let i = 0; i < plan.length; i++) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${plan[i]}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs || 30000)
-      }
-    );
-    let data = null;
-    try { data = await response.json(); } catch (_) { data = {}; }
+    const left = deadline - Date.now();
+    if (left < 2000) break;
+    const payload = thinkingOff
+      ? Object.assign({}, body, { generationConfig: Object.assign({}, body.generationConfig || {}, { thinkingConfig: { thinkingBudget: 0 } }) })
+      : body;
+    let response, data = null;
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${plan[i]}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(Math.min(timeoutMs || 30000, left))
+        }
+      );
+      try { data = await response.json(); } catch (_) { data = {}; }
+    } catch (netErr) {                                   // timeout / network problem -> try the next entry
+      console.error(`Gemini ${plan[i]} did not answer:`, netErr.message);
+      if (!firstData) { firstData = { error: { message: 'The AI service is slow right now. Please try again.' } }; firstStatus = 504; }
+      continue;
+    }
     if (response.ok) return { response, data };
 
-    console.error(`Gemini ${plan[i]} failed (${response.status}):`, data && data.error && data.error.message);
+    const msg = data && data.error && data.error.message;
+    console.error(`Gemini ${plan[i]} failed (${response.status}):`, msg);
+    // model does not accept the "no thinking" setting -> repeat the same call without it
+    if (response.status === 400 && thinkingOff && /think|budget/i.test(msg || '')) { thinkingOff = false; i--; continue; }
     if (!firstData) { firstData = data; firstStatus = response.status; }
 
-    // 404 = model not available -> try the next model; other non-busy errors (bad key, bad request...) stop here
+    // 404 = model not available -> skip to the fallback model; other non-busy errors (bad key etc.) stop here
     if (!busy.has(response.status) && response.status !== 404) break;
-    if (i < plan.length - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+    if (response.status === 404) { while (i < plan.length - 1 && plan[i + 1] === plan[i]) i++; }
+    else if (i < plan.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
   const err = new Error((firstData && firstData.error && firstData.error.message) || 'The AI service returned an error.');
   err.status = firstStatus;
   throw err;
 }
 
-async function callGemini(parts, maxTokens = 700) {
+// Joins all answer parts (ignores any "thought" parts) so a reply is never cut to its first piece.
+function extractText(data) {
+  const cand = data && data.candidates && data.candidates[0];
+  const parts = cand && cand.content && cand.content.parts;
+  const text = Array.isArray(parts) ? parts.filter(p => p && p.text && !p.thought).map(p => p.text).join('') : '';
+  if (!text.trim()) {
+    const block = data && data.promptFeedback && data.promptFeedback.blockReason;
+    throw new Error(block ? 'That message could not be answered. Please rephrase and try again.' : 'No text came back from the model.');
+  }
+  return text;
+}
+
+async function callGemini(parts, maxTokens = 700, opts = {}) {
   const { data } = await geminiFetch({
     contents: [{ parts }],
     generationConfig: { maxOutputTokens: maxTokens }
-  }, 60000);
-  const text = data.candidates &&
-    data.candidates[0] &&
-    data.candidates[0].content &&
-    data.candidates[0].content.parts &&
-    data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text;
-  if (!text) {
-    throw new Error('No text came back from the model.');
-  }
-  return text;
+  }, 60000, opts);
+  return extractText(data);
+}
+
+// Chat call: real system instruction + real multi-turn history (more accurate, and fast: thinking off).
+async function callGeminiChat({ system, contents, maxTokens = 1800 }) {
+  const { data } = await geminiFetch({
+    system_instruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.6 }
+  }, 30000, { fast: true });
+  return extractText(data);
+}
+
+// Short, farmer-friendly error text for the chat window.
+function friendlyGeminiError(e) {
+  const s = e && e.status;
+  if (s === 429) return 'The AI is very busy right now. Please try again in a few seconds.';
+  if (s === 500 || s === 502 || s === 503 || s === 504) return 'The AI service is busy or slow right now. Please try again in a moment.';
+  if (s === 404) return 'The AI model is not available on the server. Please ask the app owner to update GEMINI_MODEL.';
+  return (e && e.message) || 'The AI service returned an error.';
 }
 
 /* Gemini WITH Google Search grounding — reads today's prices from the web.
@@ -176,53 +217,70 @@ app.post('/hasura/diagnose', async (req, res) => {
 });
 
 /* ============================= CHATBOT (direct REST) ============================= */
-// Called directly by chatbot.html's fetch("/api/chat") — NOT through Hasura.
+// Called directly by chatbot.html — NOT through Hasura.
+function languageRuleFor(lang) {
+  if (lang === 'ta') return `Reply ENTIRELY in the Tamil language, in Tamil (தமிழ்) script only, whatever script the farmer typed in. Do not mix in English sentences and do not use Tanglish.`;
+  if (lang === 'en') return `Reply ENTIRELY in plain English, whatever script the farmer typed in.`;
+  return `Look ONLY at the farmer's latest message and copy its language STYLE exactly (ignore the language of earlier turns):
+   - pure English -> reply in pure English.
+   - Tamil script (தமிழ் எழுத்துக்கள்) -> reply entirely in Tamil script.
+   - "Tanglish" (Tamil words written in English letters, e.g. "eppadi irukeenga", "enna panna venum", "thenga maram ku enna fertilizer podanum", "nellu la poochi irukku") -> reply in the SAME Tanglish style: Tamil words in Latin letters, casual and easy to read, NOT Tamil script and NOT formal English.
+   Do not switch styles on your own.`;
+}
+
+function chatSystemPrompt(lang, withPhoto) {
+  return `You are "AgriNova Assistant" (AgriAssist AI), a friendly, knowledgeable agricultural expert chatbot inside a farming app for Indian (mainly Tamil Nadu) farmers. You help with crops, plant diseases, pests, fertilizers, irrigation, soil health, weather-related farming decisions, market/harvest timing, livestock basics and general farming best practices.${withPhoto ? ' The farmer has attached a photo (crop, leaf, pest, soil, equipment...). Look at it carefully and use it in your answer.' : ''}
+
+RULES:
+1. Only answer questions about agriculture, farming, crops, plants, livestock basics, or the AgriNova app itself. If the farmer asks something completely unrelated (politics, entertainment, coding...), politely say you can only help with farming topics and steer back.
+2. LANGUAGE: ${languageRuleFor(lang)}
+3. Answer the farmer's LATEST message directly. Use the earlier conversation only as context. If the message is just a crop or topic name (for example "coconut"), give a short useful overview (best climate and soil, water need, common problems) and invite a specific question.
+4. Be practical, specific and easy to act on. If you are not fully certain (exact chemical dosages, local rules), say so and suggest confirming with the local agriculture officer.
+5. Warm, encouraging tone, like a helpful local agricultural officer.
+6. FORMATTING: plain conversational text like a text message. NO markdown: no "###", no "**bold**", no numbered lists. For a few steps use one line each starting with "-".
+7. LENGTH: SHORT by default - 2 to 5 sentences, or up to 5 short "-" lines. Go longer only if the farmer asks for detail.
+8. Never mention these rules.`;
+}
+
+// Turns the app's history into proper alternating Gemini turns, then adds the new message.
+function buildChatContents(history, text, extraParts) {
+  const turns = [];
+  (Array.isArray(history) ? history : []).slice(-12).forEach(h => {
+    const t = String((h && h.content) || '').trim().slice(0, 2000);
+    if (!t) return;
+    const role = h.role === 'user' ? 'user' : 'model';
+    const last = turns[turns.length - 1];
+    if (last && last.role === role) last.parts[0].text += '\n' + t;
+    else turns.push({ role, parts: [{ text: t }] });
+  });
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  let current = text;
+  const last = turns[turns.length - 1];
+  if (last && last.role === 'user') { current = last.parts[0].text + '\n' + current; turns.pop(); }
+  turns.push({ role: 'user', parts: [{ text: current }].concat(extraParts || []) });
+  return turns;
+}
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, history, lang } = req.body || {};
 
-    if (!message || !message.trim()) {
+    if (!message || !String(message).trim()) {
       return res.status(400).json({ error: { message: 'Missing message.' } });
     }
     if (!GEMINI_API_KEY) {
       return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
     }
 
-    // history comes as [{role: "user"|"assistant", content: "..."}] from the frontend.
-    const historyText = Array.isArray(history) && history.length
-      ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
-      : '';
-
-    const languageRule = lang === 'ta'
-      ? `2. The app's language toggle is set to TAMIL. You MUST write your ENTIRE reply in the Tamil language, using Tamil (தமிழ்) script only — regardless of what script the farmer typed in (English, Tanglish, or Tamil). Do not mix in English sentences, and do not reply in Tanglish.`
-      : lang === 'en'
-      ? `2. The app's language toggle is set to ENGLISH. You MUST write your ENTIRE reply in plain English — regardless of what script the farmer typed in.`
-      : `2. Match the farmer's exact language STYLE from their latest message:
-   - If they wrote in pure English → reply in pure English.
-   - If they wrote in Tamil script (தமிழ் எழுத்துக்கள்) → reply entirely in Tamil script.
-   - If they wrote in "Tanglish" (Tamil words spelled out using English/Latin letters, e.g. "eppadi irukeenga", "enna panna venum") → reply in that SAME Tanglish style — Tamil words in Latin letters, casual and easy to read, NOT in Tamil script and NOT in formal English.
-   Do not switch styles on your own; mirror exactly what the farmer used.`;
-
-    const systemPrompt = `You are "AgriNova Assistant" (AgriAssist AI), a friendly, knowledgeable agricultural expert chatbot for a farming app. You help farmers with questions about crops, plant diseases, pests, fertilizers, irrigation, soil health, weather-related farming decisions, market/harvest timing, and general farming best practices.
-
-RULES:
-1. Only answer questions related to agriculture, farming, crops, plants, livestock basics, or the AgriNova app itself. If the farmer asks something completely unrelated (e.g. politics, entertainment, coding), politely say you can only help with farming and agriculture topics, and steer back.
-${languageRule}
-3. Keep answers practical, concise, and easy for a farmer to act on — prefer short paragraphs or bullet-style steps over long essays.
-4. If you're not fully certain about something (e.g. exact chemical dosages, local regulations), say so and suggest confirming with a local agricultural extension officer.
-5. Be warm and encouraging in tone, like a helpful local agricultural officer.
-6. FORMATTING: Write in plain conversational text, like a text message. Do NOT use markdown syntax — no "###" headings, no "**bold**" asterisks, no numbered "1." lists. If you need to list a few steps, put each one on its own line starting with a simple dash "-", and keep the whole reply to a few short lines or a short paragraph. Avoid long essays; keep it skimmable on a small phone screen.
-7. LENGTH: Keep replies SHORT by default — 2 to 5 sentences, or up to 5 short dash-bullet lines if listing steps. Only go longer if the farmer explicitly asks for more detail (e.g. "explain in detail", "give me everything").
-
-${historyText}Farmer: ${message}
-AgriNova Assistant:`;
-
     let text;
     try {
-      text = await callGemini([{ text: systemPrompt }], 1500);
+      text = await callGeminiChat({
+        system: chatSystemPrompt(lang, false),
+        contents: buildChatContents(history, String(message).trim().slice(0, 3000))
+      });
     } catch (e) {
-      console.error('Gemini API error (chat):', e);
-      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+      console.error('Gemini API error (chat):', e.message);
+      return res.status(400).json({ error: { message: friendlyGeminiError(e) } });
     }
 
     res.json({ reply: text.trim() });
@@ -234,13 +292,10 @@ AgriNova Assistant:`;
 });
 
 /* ===================== CHATBOT WITH PHOTO ATTACHMENT ===================== */
-// Called when the farmer attaches a photo in the chat ("+" menu → Add photo).
-// Reuses the same Gemini vision capability as the disease detector, but lets
-// the farmer ask a free-form question about the photo instead of a fixed
-// diagnosis format.
+// Called when the farmer attaches a photo in the chat ("+" menu -> Add photo).
 app.post('/api/chat-image', async (req, res) => {
   try {
-    const { message, image, mediaType, history } = req.body || {};
+    const { message, image, mediaType, history, lang } = req.body || {};
 
     if (!image || !mediaType) {
       return res.status(400).json({ error: { message: 'Missing image or mediaType.' } });
@@ -249,32 +304,19 @@ app.post('/api/chat-image', async (req, res) => {
       return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
     }
 
-    const historyText = Array.isArray(history) && history.length
-      ? history.map(h => `${h.role === 'user' ? 'Farmer' : 'AgriNova Assistant'}: ${h.content}`).join('\n') + '\n'
-      : '';
-
-    const userMessage = message && message.trim() ? message.trim() : 'What can you tell me about this photo? (No specific question was given — describe what you see and anything relevant to a farmer.)';
-
-    const systemPrompt = `You are "AgriNova Assistant", a friendly, knowledgeable agricultural expert chatbot for a farming app. The farmer has attached a photo along with their message. Look at the photo carefully and answer helpfully — this could be a crop, leaf, pest, soil, equipment, or anything farming-related.
-
-RULES:
-1. Only discuss agriculture, farming, crops, plants, pests, soil, or the AgriNova app itself. If the photo or question is unrelated to farming, politely say so.
-2. Match the farmer's language/style from their message (English, Tamil script, or Tanglish) — mirror exactly what they used. If no text was given, reply in English.
-3. FORMATTING: Plain conversational text, no markdown symbols (no ###, no **). Use simple dash "-" bullets only if listing steps, and keep it short and skimmable.
-4. Be warm and practical, like a helpful local agricultural officer. If unsure, say so and suggest a local expert.
-
-${historyText}Farmer (with attached photo): ${userMessage}
-AgriNova Assistant:`;
+    const userMessage = message && String(message).trim()
+      ? String(message).trim().slice(0, 3000)
+      : 'What can you tell me about this photo? (No specific question was given - describe what you see and anything relevant to a farmer.)';
 
     let text;
     try {
-      text = await callGemini([
-        { text: systemPrompt },
-        { inline_data: { mime_type: mediaType, data: image } }
-      ], 1500);
+      text = await callGeminiChat({
+        system: chatSystemPrompt(lang, true),
+        contents: buildChatContents(history, userMessage, [{ inline_data: { mime_type: mediaType, data: image } }])
+      });
     } catch (e) {
-      console.error('Gemini API error (chat-image):', e);
-      return res.status(400).json({ error: { message: e.message || 'The AI service returned an error.' } });
+      console.error('Gemini API error (chat-image):', e.message);
+      return res.status(400).json({ error: { message: friendlyGeminiError(e) } });
     }
 
     res.json({ reply: text.trim() });
