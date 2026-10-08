@@ -1,5 +1,6 @@
 // AgriNova backend — handles:
-//   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision)
+//   0. /api/diagnose    — FAST leaf-photo disease diagnosis, called DIRECTLY by the disease detector page (Gemini vision, 1 call)
+//   1. /hasura/diagnose — leaf-photo disease diagnosis, called by Hasura Action (Gemini vision) — old route, kept
 //   2. /api/chat        — agriculture chatbot, called DIRECTLY by chatbot.html (Gemini text)
 //   3. /api/chat-image  — chatbot with photo attachment
 //   4. /api/schemes     — government schemes list
@@ -167,7 +168,67 @@ async function callGeminiGrounded(parts, maxTokens = 1000) {
   return text;
 }
 
-/* ========================= DISEASE DIAGNOSIS (via Hasura) ========================= */
+/* ===================== FAST DIAGNOSE (direct REST, 1 call, thinking off) ===================== */
+// Called directly by the disease detector page. No Hasura hop, thinking is off, and the
+// Tamil translation (if asked for in the prompt) comes back in the same single call.
+app.use('/api/diagnose', rateLimit(20, 60 * 1000));
+app.post('/api/diagnose', async (req, res) => {
+  try {
+    const { image, mediaType, prompt } = req.body || {};
+    if (!image || !mediaType || !prompt) {
+      return res.status(400).json({ error: { message: 'Missing image, mediaType, or prompt.' } });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(400).json({ error: { message: 'Server is missing GEMINI_API_KEY.' } });
+    }
+
+    let text;
+    try {
+      text = await callGemini(
+        [{ text: prompt }, { inline_data: { mime_type: mediaType, data: image } }],
+        3000,
+        { fast: true, totalMs: 45000 }
+      );
+    } catch (e) {
+      console.error('Gemini API error (diagnose):', e.message);
+      return res.status(400).json({ error: { message: friendlyGeminiError(e) } });
+    }
+
+    const s = text.indexOf('{'), e = text.lastIndexOf('}');
+    if (s === -1 || e === -1) {
+      return res.status(400).json({ error: { message: 'Could not read the result. Please try again.' } });
+    }
+    let diag;
+    try { diag = JSON.parse(text.slice(s, e + 1)); }
+    catch (_) { return res.status(400).json({ error: { message: 'Could not read the result. Please try again.' } }); }
+
+    const ta = diag.ta && typeof diag.ta === 'object' ? {
+      diseaseName: diag.ta.diseaseName || null,
+      crop: diag.ta.crop || null,
+      description: diag.ta.description || null,
+      actions: Array.isArray(diag.ta.actions) ? diag.ta.actions : null,
+      note: diag.ta.note || null
+    } : null;
+
+    res.json({
+      diseaseName: diag.diseaseName || 'Unidentified',
+      latinName: diag.latinName || null,
+      crop: diag.crop || 'Unidentified plant',
+      status: ['healthy', 'mild', 'severe'].includes(diag.status) ? diag.status : 'mild',
+      confidence: Number.isFinite(Number(diag.confidence)) ? Math.round(Number(diag.confidence)) : 0,
+      severity: Number.isFinite(Number(diag.severity)) ? Math.round(Number(diag.severity)) : 0,
+      description: diag.description || '',
+      actions: Array.isArray(diag.actions) ? diag.actions : [],
+      note: diag.note || null,
+      ta
+    });
+  } catch (err) {
+    console.error('Diagnose handler crashed:', err);
+    res.status(400).json({ error: { message: 'Server error while running the diagnosis.' } });
+  }
+});
+
+/* ========================= DISEASE DIAGNOSIS (via Hasura) — old route, kept ========================= */
 app.post('/hasura/diagnose', async (req, res) => {
   try {
     const { image, mediaType, prompt } = req.body.input || {};
@@ -184,7 +245,7 @@ app.post('/hasura/diagnose', async (req, res) => {
       text = await callGemini([
         { text: prompt },
         { inline_data: { mime_type: mediaType, data: image } }
-      ], 2500);
+      ], 2500, { fast: true });
     } catch (e) {
       console.error('Gemini API error (diagnose):', e);
       return res.status(400).json({ message: e.message || 'The AI service returned an error.' });
