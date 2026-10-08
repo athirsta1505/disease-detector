@@ -54,16 +54,19 @@ app.use(['/api/chat', '/api/chat-image', '/api/fertilizer', '/api/market-price',
 app.use('/api/weather-alerts/email', rateLimit(10, 60 * 1000));
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-// Used only when the main model keeps answering "high demand" (503/429). Set GEMINI_FALLBACK_MODEL in Render to change it.
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+// NOTE: if you set GEMINI_MODEL / GEMINI_FALLBACK_MODEL in Render > Environment, those override these defaults.
+// Either delete them there, or set them to the same names as below.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Used only when the main model keeps answering "high demand" (503/429) or is unavailable (404).
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
 
 // Calls Gemini; retries busy errors (429/500/503/504) with a short wait, then tries the fallback model.
+// A 404 (model no longer available) also jumps straight to the next model in the plan.
 async function geminiFetch(body, timeoutMs) {
   const busy = new Set([429, 500, 502, 503, 504]);
-  const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
-    .filter((m, i, a) => m && (i < 3 || a[0] !== m));
-  let lastData = null, lastStatus = 0;
+  const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
+    .filter((m, i, a) => m && (i < 2 || a[0] !== m));
+  let firstData = null, firstStatus = 0;
   for (let i = 0; i < plan.length; i++) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${plan[i]}:generateContent?key=${GEMINI_API_KEY}`,
@@ -77,12 +80,16 @@ async function geminiFetch(body, timeoutMs) {
     let data = null;
     try { data = await response.json(); } catch (_) { data = {}; }
     if (response.ok) return { response, data };
-    lastData = data; lastStatus = response.status;
-    if (!busy.has(response.status)) break;                 // real error (bad key, bad request...) - don't retry
+
+    console.error(`Gemini ${plan[i]} failed (${response.status}):`, data && data.error && data.error.message);
+    if (!firstData) { firstData = data; firstStatus = response.status; }
+
+    // 404 = model not available -> try the next model; other non-busy errors (bad key, bad request...) stop here
+    if (!busy.has(response.status) && response.status !== 404) break;
     if (i < plan.length - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
   }
-  const err = new Error((lastData && lastData.error && lastData.error.message) || 'The AI service returned an error.');
-  err.status = lastStatus;
+  const err = new Error((firstData && firstData.error && firstData.error.message) || 'The AI service returned an error.');
+  err.status = firstStatus;
   throw err;
 }
 
@@ -2280,6 +2287,8 @@ app.get('/api/health', async (req, res) => {
   const out = {
     ok: true,
     gemini: !!GEMINI_API_KEY,
+    geminiModel: GEMINI_MODEL,
+    geminiFallbackModel: GEMINI_FALLBACK_MODEL,
     dataGov: !!DATA_GOV_API_KEY,
     push: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
     email: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
