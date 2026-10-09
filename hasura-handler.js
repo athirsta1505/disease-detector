@@ -1587,6 +1587,22 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
   }
 });
 
+// "Turn off" button: keep the saved row (email, location, subscription) and only switch the alerts off.
+// The checker skips rows where rain_on and water_on are both false, so nothing is sent while paused.
+app.post('/api/weather-alerts/pause', async (req, res) => {
+  try {
+    const endpoint = req.body && req.body.endpoint;
+    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
+    await hasuraGql(
+      `mutation($e:String!){ update_agri_weather_alerts(where:{endpoint:{_eq:$e}}, _set:{rain_on:false, water_on:false}){ affected_rows } }`,
+      { e: endpoint });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
+  }
+});
+
+// Full delete (only if you ever want to remove the saved row completely)
 app.post('/api/weather-alerts/unsubscribe', async (req, res) => {
   try {
     const endpoint = req.body && req.body.endpoint;
