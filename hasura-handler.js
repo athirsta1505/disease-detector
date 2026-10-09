@@ -11,8 +11,6 @@
 //   9. /api/weather-alerts/subscribe|unsubscribe|check — weather page: daily weather message (sunny/cloudy/rain/heat),
 //      max 5 messages/day: 4 water reminders + 1 rain alert (push + verified email)
 //  10. /api/chats/* — chat history (Hasura tables chats + chat_messages), /api/health — status check
-//  11. /api/profile — farmer profile (Hasura table agri.farmer_profiles), saved per owner (email) so it
-//      shows on every phone / laptop
 //
 // IMPORTANT: Hasura Action webhooks only accept 2xx or 4xx status codes —
 // a 500 makes Hasura report a generic "internal error". So /hasura/diagnose
@@ -30,7 +28,7 @@ app.use(express.json({ limit: '15mb' }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -1807,6 +1805,51 @@ app.post('/api/auth/verify-reset-code', (req, res) => {
   res.json({ ok: true });
 });
 
+/* ===================== LOGIN CHECK (Firebase ID token) ===================== */
+// Every page sends the farmer's Firebase login token (Authorization: Bearer ...). For any
+// account that is an email, the token must belong to that same email -- so nobody can read or
+// change another farmer's data just by typing their email. Guests (random id) are not checked.
+// Set REQUIRE_AUTH=0 on Render to switch the check off while rolling out.
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'editfarmer-e98f3';
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH !== '0';
+let jwkCache = { keys: {}, exp: 0 };
+async function firebaseKey(kid) {
+  if (Date.now() > jwkCache.exp || !jwkCache.keys[kid]) {
+    const r = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
+    if (!r.ok) throw new Error('Could not load Firebase keys.');
+    const j = await r.json();
+    const mm = /max-age=(\d+)/.exec(r.headers.get('cache-control') || '');
+    jwkCache = { keys: {}, exp: Date.now() + (mm ? Number(mm[1]) : 3600) * 1000 };
+    for (const k of j.keys) jwkCache.keys[k.kid] = crypto.createPublicKey({ key: k, format: 'jwk' });
+  }
+  return jwkCache.keys[kid];
+}
+async function verifyFirebaseToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) throw new Error('bad token');
+  const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+  if (header.alg !== 'RS256' || !header.kid) throw new Error('bad token');
+  const key = await firebaseKey(header.kid);
+  if (!key) throw new Error('unknown key');
+  const ok = crypto.verify('RSA-SHA256', Buffer.from(parts[0] + '.' + parts[1]), key, Buffer.from(parts[2], 'base64url'));
+  if (!ok) throw new Error('bad signature');
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.aud !== FIREBASE_PROJECT_ID || payload.iss !== 'https://securetoken.google.com/' + FIREBASE_PROJECT_ID ||
+      !payload.sub || payload.exp < now || payload.iat > now + 300) throw new Error('bad claims');
+  return payload;
+}
+// returns an error message, or null when the request may go ahead
+async function checkOwnerLogin(req, owner) {
+  if (!REQUIRE_AUTH || !owner.includes('@')) return null;
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return 'Please log in again.';
+  try {
+    const p = await verifyFirebaseToken(m[1]);
+    return String(p.email || '').toLowerCase() === owner ? null : 'This login does not match this account.';
+  } catch (e) { return 'Please log in again.'; }
+}
+
 /* ===================== CHAT HISTORY (Hasura tables: chats + chat_messages) ===================== */
 // chatbot.html calls these routes (instead of talking to Hasura directly), so Hasura is only
 // reached with the admin secret from here — no public database permissions needed, and each
@@ -1814,15 +1857,20 @@ app.post('/api/auth/verify-reset-code', (req, res) => {
 // All routes are GET/POST only, so the existing CORS settings keep working.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function chatGuard(req, res, next) {
-  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
-  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
-  if (req.params.id) {
-    if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
-    req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
-  }
-  req.owner = raw;
-  next();
+async function chatGuard(req, res, next) {
+  try {
+    const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+    if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+    if (req.params.id) {
+      if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+      req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
+    }
+    const owner = raw.includes('@') ? raw.toLowerCase() : raw;   // same account = same data on every phone
+    const bad = await checkOwnerLogin(req, owner);
+    if (bad) return res.status(401).json({ error: { message: bad } });
+    req.owner = owner;
+    next();
+  } catch (e) { res.status(400).json({ error: { message: 'Request failed.' } }); }
 }
 
 async function ownsChat(id, owner) {
@@ -1970,11 +2018,16 @@ app.get('/api/diagnoses', chatGuard, async (req, res) => {
 });
 
 // ---- Owner check for endpoints whose ids are numbers (not uuids) ----
-function ownerGuard(req, res, next) {
-  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
-  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
-  req.owner = raw;
-  next();
+async function ownerGuard(req, res, next) {
+  try {
+    const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+    if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+    const owner = raw.includes('@') ? raw.toLowerCase() : raw;
+    const bad = await checkOwnerLogin(req, owner);
+    if (bad) return res.status(401).json({ error: { message: bad } });
+    req.owner = owner;
+    next();
+  } catch (e) { res.status(400).json({ error: { message: 'Request failed.' } }); }
 }
 const numOrNull = v => (v === '' || v == null || !isFinite(Number(v))) ? null : Number(v);
 const txt = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
@@ -2403,56 +2456,55 @@ app.post('/api/watchlist/delete', ownerGuard, async (req, res) => {
   } catch (e) { chatErr(res, e); }
 });
 
-// ---- Farmer profile (table: agri.farmer_profiles) ----
-// Saved per "owner" (the farmer's email), so the same profile shows on every phone / laptop.
-app.use('/api/profile', rateLimit(60, 60 * 1000));
+/* ===================== ACCOUNT SETTINGS (same on every phone) ===================== */
+// Profile, notification choices, reminder, place... saved against the farmer's email, so logging in
+// on another phone shows exactly the same. Table: agri.user_settings (see user_settings.sql).
+// The page sends only the keys that changed; null removes a key.
+const SETTING_KEYS = new Set(['name', 'dob', 'age', 'gender', 'phone', 'countryCode', 'address', 'farm', 'soil', 'crop',
+  'irrigation', 'profileImage', 'agrinova_fert_reminder', 'agrinova:notif', 'agrinova:paused', 'agrinova:place', 'agrinova:email']);
+app.use('/api/user-settings', rateLimit(60, 60 * 1000));
 
-const profileOut = r => r ? {
-  name: r.name || '', dob: r.dob || '', gender: r.gender || '', phone: r.phone || '',
-  countryCode: r.country_code || '+91', address: r.address || '', farm: r.farm || '',
-  soil: r.soil || '', crop: r.crop || '', irrigation: r.irrigation || '',
-  profileImage: r.profile_image || ''
-} : {};
+function settingsOwner(req, res, next) {
+  if (!req.owner.includes('@')) return res.status(401).json({ error: { message: 'Log in to keep settings on your account.' } });
+  next();
+}
 
-app.get('/api/profile', ownerGuard, async (req, res) => {
+app.get('/api/user-settings', ownerGuard, settingsOwner, async (req, res) => {
   try {
     const d = await hasuraGql(
-      `query($o:String!){ agri_farmer_profiles(where:{owner:{_eq:$o}}, limit:1){
-         id name dob gender phone country_code address farm soil crop irrigation profile_image } }`,
+      `query($o:String!){ rows: agri_user_settings(where:{owner:{_eq:$o}}, limit:1){ data updated_at } }`,
       { o: req.owner });
-    res.json({ profile: profileOut(d.agri_farmer_profiles[0]) });
+    const row = d.rows[0];
+    res.json({ exists: !!row, data: row ? row.data : {}, updated_at: row ? row.updated_at : null });
   } catch (e) { chatErr(res, e); }
 });
 
-app.post('/api/profile', ownerGuard, async (req, res) => {
+app.post('/api/user-settings', ownerGuard, settingsOwner, async (req, res) => {
   try {
-    const b = req.body || {};
-    const row = {
-      name: txt(b.name, 80), dob: dateOrNull(b.dob),
-      gender: ['male', 'female'].includes(b.gender) ? b.gender : null,
-      phone: txt(b.phone, 30), country_code: txt(b.countryCode, 8),
-      address: txt(b.address, 300), farm: txt(b.farm, 40), soil: txt(b.soil, 60),
-      crop: txt(b.crop, 60), irrigation: txt(b.irrigation, 40),
-      updated_at: 'now()'
-    };
-    // photo: only overwrite when the farmer actually chose one (avatar path or small compressed image)
-    if (typeof b.profileImage === 'string' && b.profileImage) {
-      if (b.profileImage.length > 400000) return res.status(400).json({ error: { message: 'Photo is too large. Please choose a smaller one.' } });
-      row.profile_image = b.profileImage;
+    const ch = req.body && req.body.data;
+    if (!ch || typeof ch !== 'object' || Array.isArray(ch)) return res.status(400).json({ error: { message: 'Nothing to save.' } });
+    const clean = {};
+    for (const k of Object.keys(ch)) {
+      if (!SETTING_KEYS.has(k)) continue;
+      const v = ch[k];
+      if (v === null) clean[k] = null;
+      else if (typeof v === 'string' && v.length <= 3 * 1024 * 1024) clean[k] = v;   // profile photo can be a few MB
     }
-    const ex = await hasuraGql(
-      `query($o:String!){ agri_farmer_profiles(where:{owner:{_eq:$o}}, limit:1){ id } }`,
-      { o: req.owner });
-    if (ex.agri_farmer_profiles.length) {
+    const d = await hasuraGql(
+      `query($o:String!){ rows: agri_user_settings(where:{owner:{_eq:$o}}, limit:1){ data } }`, { o: req.owner });
+    const merged = Object.assign({}, d.rows[0] ? d.rows[0].data : {});
+    for (const k of Object.keys(clean)) { if (clean[k] === null) delete merged[k]; else merged[k] = clean[k]; }
+    const now = new Date().toISOString();
+    if (d.rows[0]) {
       await hasuraGql(
-        `mutation($id:Int!,$s:agri_farmer_profiles_set_input!){ update_agri_farmer_profiles_by_pk(pk_columns:{id:$id}, _set:$s){ id } }`,
-        { id: ex.agri_farmer_profiles[0].id, s: row });
+        `mutation($o:String!,$d:jsonb!,$t:timestamptz!){ update_agri_user_settings(where:{owner:{_eq:$o}}, _set:{data:$d, updated_at:$t}){ affected_rows } }`,
+        { o: req.owner, d: merged, t: now });
     } else {
       await hasuraGql(
-        `mutation($o:agri_farmer_profiles_insert_input!){ insert_agri_farmer_profiles_one(object:$o){ id } }`,
-        { o: Object.assign({ owner: req.owner }, row) });
+        `mutation($x: agri_user_settings_insert_input!){ insert_agri_user_settings_one(object:$x){ owner } }`,
+        { x: { owner: req.owner, data: merged, updated_at: now } });
     }
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: now });
   } catch (e) { chatErr(res, e); }
 });
 
