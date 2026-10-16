@@ -1,7 +1,7 @@
 {
   "name": "agrinova-backend",
   "version": "1.0.0",
-  "description": "AgriNova backend — disease diagnosis, chatbot, schemes, fertilizer, market price and email notifications, all powered by Gemini.",
+  "description": "AgriNova backend — disease diagnosis, chatbot, schemes, fertilizer, market price, irrigation and weather alerts.",
   "main": "hasura-handler.js",
   "scripts": {
     "start": "node hasura-handler.js"
@@ -12,6 +12,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "dotenv": "^16.4.5",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "web-push": "^3.6.7"
   }
 }
