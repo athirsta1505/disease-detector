@@ -28,7 +28,7 @@ app.use(express.json({ limit: '15mb' }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -121,16 +121,16 @@ async function geminiFetch(body, timeoutMs, opts = {}) {
     const msg = data && data.error && data.error.message;
     console.error(`Gemini ${plan[i]} failed (${response.status}):`, msg);
     // model does not accept the "no thinking" setting -> repeat the same call without it
-    if (response.status === 400 && thinkingOff && /think|budget/i.test(msg || '')) { thinkingOff = false; i--; continue; }
+    if (response.status === 400 && thinkingOff) { thinkingOff = false; i--; continue; }   // any 400: retry without the 'no thinking' setting
     if (!firstData) { firstData = data; firstStatus = response.status; }
 
     // 404 = model not available -> skip to the fallback model; other non-busy errors (bad key etc.) stop here
-    if (!busy.has(response.status) && response.status !== 404) break;
+    if (!busy.has(response.status) && response.status !== 404 && response.status !== 400) break;
+    if (response.status === 400) continue;               // may be specific to one model -> try the next
     if (response.status === 404) { while (i < plan.length - 1 && plan[i + 1] === plan[i]) i++; }
     else if (response.status === 429 && !geminiFetch._waited) {
-      // Google says how long to wait ("retryDelay": "3s"): wait that long (max 4s) once, then retry the same model.
-      const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(JSON.stringify(data || {}));
-      const wait = Math.min(4000, m ? Math.ceil(parseFloat(m[1]) * 1000) : 1500);
+      const mm = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(JSON.stringify(data || {}));
+      const wait = Math.min(4000, mm ? Math.ceil(parseFloat(mm[1]) * 1000) : 1500);
       geminiFetch._waited = true;
       await new Promise(r => setTimeout(r, wait));
       if (deadline - Date.now() > wait + 4000) i--;
@@ -138,7 +138,7 @@ async function geminiFetch(body, timeoutMs, opts = {}) {
     else if (i < plan.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
   // Every configured model said "not found" (404): ask Google which Gemini models this key can use and try those.
-  if ((firstStatus === 404 || busy.has(firstStatus)) && GEMINI_API_KEY) {
+  if ((firstStatus === 404 || firstStatus === 400 || busy.has(firstStatus)) && GEMINI_API_KEY) {
     const tried = new Set(plan);
     const alt = (await discoverModels()).filter(m => !tried.has(m)).slice(0, 5);
     for (const m of alt) {
@@ -334,7 +334,6 @@ app.post('/hasura/diagnose', async (req, res) => {
 
 /* ============================= CHATBOT (direct REST) ============================= */
 // Called directly by chatbot.html — NOT through Hasura.
-// Works out how the farmer wrote their message: Tamil script, "Tanglish" (Tamil in English letters) or English.
 const TANGLISH_WORDS = new Set(('enna ennaku enakku eppadi epdi iruku irukku irukkum irukkuthu irukkum panna pannanum pannunga pannuven pannalama panalama pannu ' +
   'venum venuma vendam sollu sollunga solluga podanum podalama podalaama nalla romba konjam neenga ungaluku ungalukku illa illai aana aanaa ' +
   'maram nellu thenga vayal poochi poochchi payir uram thanni mazhai vivasayam evlo evvalavu seiyanum vandhuchu vanthuchu aagum aaguthu aagala ' +
@@ -1715,22 +1714,6 @@ app.post('/api/weather-alerts/subscribe', async (req, res) => {
   }
 });
 
-// "Turn off" button: keep the saved row (email, location, subscription) and only switch the alerts off.
-// The checker skips rows where rain_on and water_on are both false, so nothing is sent while paused.
-app.post('/api/weather-alerts/pause', async (req, res) => {
-  try {
-    const endpoint = req.body && req.body.endpoint;
-    if (!endpoint) return res.status(400).json({ error: { message: 'Missing endpoint.' } });
-    await hasuraGql(
-      `mutation($e:String!){ update_agri_weather_alerts(where:{endpoint:{_eq:$e}}, _set:{rain_on:false, water_on:false}){ affected_rows } }`,
-      { e: endpoint });
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: { message: e.message || 'Could not turn off alerts.' } });
-  }
-});
-
-// Full delete (only if you ever want to remove the saved row completely)
 app.post('/api/weather-alerts/unsubscribe', async (req, res) => {
   try {
     const endpoint = req.body && req.body.endpoint;
@@ -1933,51 +1916,6 @@ app.post('/api/auth/verify-reset-code', (req, res) => {
   res.json({ ok: true });
 });
 
-/* ===================== LOGIN CHECK (Firebase ID token) ===================== */
-// Every page sends the farmer's Firebase login token (Authorization: Bearer ...). For any
-// account that is an email, the token must belong to that same email -- so nobody can read or
-// change another farmer's data just by typing their email. Guests (random id) are not checked.
-// Set REQUIRE_AUTH=0 on Render to switch the check off while rolling out.
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'editfarmer-e98f3';
-const REQUIRE_AUTH = process.env.REQUIRE_AUTH !== '0';
-let jwkCache = { keys: {}, exp: 0 };
-async function firebaseKey(kid) {
-  if (Date.now() > jwkCache.exp || !jwkCache.keys[kid]) {
-    const r = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
-    if (!r.ok) throw new Error('Could not load Firebase keys.');
-    const j = await r.json();
-    const mm = /max-age=(\d+)/.exec(r.headers.get('cache-control') || '');
-    jwkCache = { keys: {}, exp: Date.now() + (mm ? Number(mm[1]) : 3600) * 1000 };
-    for (const k of j.keys) jwkCache.keys[k.kid] = crypto.createPublicKey({ key: k, format: 'jwk' });
-  }
-  return jwkCache.keys[kid];
-}
-async function verifyFirebaseToken(token) {
-  const parts = String(token || '').split('.');
-  if (parts.length !== 3) throw new Error('bad token');
-  const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
-  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-  if (header.alg !== 'RS256' || !header.kid) throw new Error('bad token');
-  const key = await firebaseKey(header.kid);
-  if (!key) throw new Error('unknown key');
-  const ok = crypto.verify('RSA-SHA256', Buffer.from(parts[0] + '.' + parts[1]), key, Buffer.from(parts[2], 'base64url'));
-  if (!ok) throw new Error('bad signature');
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.aud !== FIREBASE_PROJECT_ID || payload.iss !== 'https://securetoken.google.com/' + FIREBASE_PROJECT_ID ||
-      !payload.sub || payload.exp < now || payload.iat > now + 300) throw new Error('bad claims');
-  return payload;
-}
-// returns an error message, or null when the request may go ahead
-async function checkOwnerLogin(req, owner) {
-  if (!REQUIRE_AUTH || !owner.includes('@')) return null;
-  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
-  if (!m) return 'Please log in again.';
-  try {
-    const p = await verifyFirebaseToken(m[1]);
-    return String(p.email || '').toLowerCase() === owner ? null : 'This login does not match this account.';
-  } catch (e) { return 'Please log in again.'; }
-}
-
 /* ===================== CHAT HISTORY (Hasura tables: chats + chat_messages) ===================== */
 // chatbot.html calls these routes (instead of talking to Hasura directly), so Hasura is only
 // reached with the admin secret from here — no public database permissions needed, and each
@@ -1985,20 +1923,15 @@ async function checkOwnerLogin(req, owner) {
 // All routes are GET/POST only, so the existing CORS settings keep working.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function chatGuard(req, res, next) {
-  try {
-    const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
-    if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
-    if (req.params.id) {
-      if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
-      req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
-    }
-    const owner = raw.includes('@') ? raw.toLowerCase() : raw;   // same account = same data on every phone
-    const bad = await checkOwnerLogin(req, owner);
-    if (bad) return res.status(401).json({ error: { message: bad } });
-    req.owner = owner;
-    next();
-  } catch (e) { res.status(400).json({ error: { message: 'Request failed.' } }); }
+function chatGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  if (req.params.id) {
+    if (!/^[0-9]{1,9}$/.test(req.params.id)) return res.status(400).json({ error: { message: 'Invalid chat id.' } });
+    req.chatId = parseInt(req.params.id, 10);   // chat ids are numbers: 1, 2, 3 ...
+  }
+  req.owner = raw;
+  next();
 }
 
 async function ownsChat(id, owner) {
@@ -2146,16 +2079,11 @@ app.get('/api/diagnoses', chatGuard, async (req, res) => {
 });
 
 // ---- Owner check for endpoints whose ids are numbers (not uuids) ----
-async function ownerGuard(req, res, next) {
-  try {
-    const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
-    if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
-    const owner = raw.includes('@') ? raw.toLowerCase() : raw;
-    const bad = await checkOwnerLogin(req, owner);
-    if (bad) return res.status(401).json({ error: { message: bad } });
-    req.owner = owner;
-    next();
-  } catch (e) { res.status(400).json({ error: { message: 'Request failed.' } }); }
+function ownerGuard(req, res, next) {
+  const raw = String((req.body && req.body.owner) || req.query.owner || '').trim();
+  if (!/^[A-Za-z0-9_@.+-]{3,120}$/.test(raw)) return res.status(400).json({ error: { message: 'Missing or invalid owner.' } });
+  req.owner = raw;
+  next();
 }
 const numOrNull = v => (v === '' || v == null || !isFinite(Number(v))) ? null : Number(v);
 const txt = (v, n) => (v == null || v === '') ? null : String(v).slice(0, n);
@@ -2273,7 +2201,7 @@ app.get('/api/crop-recommendations', ownerGuard, async (req, res) => {
   try {
     const d = await hasuraGql(
       `query($o:String!){ recommendations: agri_crop_advisory_records(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
-         id recommended_crop suitability soil weather water season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
+         id recommended_crop suitability soil season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
       { o: req.owner });
     res.json({ recommendations: d.recommendations });
   } catch (e) { chatErr(res, e); }
@@ -2581,58 +2509,6 @@ app.post('/api/watchlist/delete', ownerGuard, async (req, res) => {
       `mutation($id:Int!,$o:String!){ delete_agri_market_watchlist(where:{id:{_eq:$id},owner:{_eq:$o}}){ affected_rows } }`,
       { id, o: req.owner });
     res.json({ ok: true });
-  } catch (e) { chatErr(res, e); }
-});
-
-/* ===================== ACCOUNT SETTINGS (same on every phone) ===================== */
-// Profile, notification choices, reminder, place... saved against the farmer's email, so logging in
-// on another phone shows exactly the same. Table: agri.user_settings (see user_settings.sql).
-// The page sends only the keys that changed; null removes a key.
-const SETTING_KEYS = new Set(['name', 'dob', 'age', 'gender', 'phone', 'countryCode', 'address', 'farm', 'soil', 'crop',
-  'irrigation', 'profileImage', 'agrinova_fert_reminder', 'agrinova:notif', 'agrinova:paused', 'agrinova:place', 'agrinova:email', 'agrinova_lang']);
-app.use('/api/user-settings', rateLimit(60, 60 * 1000));
-
-function settingsOwner(req, res, next) {
-  if (!req.owner.includes('@')) return res.status(401).json({ error: { message: 'Log in to keep settings on your account.' } });
-  next();
-}
-
-app.get('/api/user-settings', ownerGuard, settingsOwner, async (req, res) => {
-  try {
-    const d = await hasuraGql(
-      `query($o:String!){ rows: agri_user_settings(where:{owner:{_eq:$o}}, limit:1){ data updated_at } }`,
-      { o: req.owner });
-    const row = d.rows[0];
-    res.json({ exists: !!row, data: row ? row.data : {}, updated_at: row ? row.updated_at : null });
-  } catch (e) { chatErr(res, e); }
-});
-
-app.post('/api/user-settings', ownerGuard, settingsOwner, async (req, res) => {
-  try {
-    const ch = req.body && req.body.data;
-    if (!ch || typeof ch !== 'object' || Array.isArray(ch)) return res.status(400).json({ error: { message: 'Nothing to save.' } });
-    const clean = {};
-    for (const k of Object.keys(ch)) {
-      if (!SETTING_KEYS.has(k)) continue;
-      const v = ch[k];
-      if (v === null) clean[k] = null;
-      else if (typeof v === 'string' && v.length <= 3 * 1024 * 1024) clean[k] = v;   // profile photo can be a few MB
-    }
-    const d = await hasuraGql(
-      `query($o:String!){ rows: agri_user_settings(where:{owner:{_eq:$o}}, limit:1){ data } }`, { o: req.owner });
-    const merged = Object.assign({}, d.rows[0] ? d.rows[0].data : {});
-    for (const k of Object.keys(clean)) { if (clean[k] === null) delete merged[k]; else merged[k] = clean[k]; }
-    const now = new Date().toISOString();
-    if (d.rows[0]) {
-      await hasuraGql(
-        `mutation($o:String!,$d:jsonb!,$t:timestamptz!){ update_agri_user_settings(where:{owner:{_eq:$o}}, _set:{data:$d, updated_at:$t}){ affected_rows } }`,
-        { o: req.owner, d: merged, t: now });
-    } else {
-      await hasuraGql(
-        `mutation($x: agri_user_settings_insert_input!){ insert_agri_user_settings_one(object:$x){ owner } }`,
-        { x: { owner: req.owner, data: merged, updated_at: now } });
-    }
-    res.json({ ok: true, updated_at: now });
   } catch (e) { chatErr(res, e); }
 });
 
