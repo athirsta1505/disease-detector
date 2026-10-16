@@ -2145,7 +2145,7 @@ app.get('/api/crop-recommendations', ownerGuard, async (req, res) => {
   try {
     const d = await hasuraGql(
       `query($o:String!){ recommendations: agri_crop_advisory_records(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:20){
-         id recommended_crop suitability soil season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
+         id recommended_crop suitability soil weather water season district temperature rainfall fertilizer irrigation harvest_time expected_yield expected_profit created_at } }`,
       { o: req.owner });
     res.json({ recommendations: d.recommendations });
   } catch (e) { chatErr(res, e); }
@@ -2461,7 +2461,7 @@ app.post('/api/watchlist/delete', ownerGuard, async (req, res) => {
 // on another phone shows exactly the same. Table: agri.user_settings (see user_settings.sql).
 // The page sends only the keys that changed; null removes a key.
 const SETTING_KEYS = new Set(['name', 'dob', 'age', 'gender', 'phone', 'countryCode', 'address', 'farm', 'soil', 'crop',
-  'irrigation', 'profileImage', 'agrinova_fert_reminder', 'agrinova:notif', 'agrinova:paused', 'agrinova:place', 'agrinova:email']);
+  'irrigation', 'profileImage', 'agrinova_fert_reminder', 'agrinova:notif', 'agrinova:paused', 'agrinova:place', 'agrinova:email', 'agrinova_lang']);
 app.use('/api/user-settings', rateLimit(60, 60 * 1000));
 
 function settingsOwner(req, res, next) {
