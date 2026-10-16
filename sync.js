@@ -26,9 +26,9 @@
   // localStorage keys that follow the farmer from phone to phone
   var KEYS = ["name", "dob", "age", "gender", "phone", "countryCode", "address", "farm", "soil", "crop",
     "irrigation", "profileImage", "agrinova_fert_reminder", "agrinova:notif", "agrinova:paused",
-    "agrinova:place", "agrinova:email"];
+    "agrinova:place", "agrinova:email", "agrinova_lang"];
   // caches of server data; wiped when a different farmer logs in on this phone
-  var CACHE_KEYS = ["agrinova_fert_history", "agriNovaHistory", "latestSoilReportId", "agrinovaSchemes", "agrinova:wxalerts"];
+  var CACHE_KEYS = ["agrinova_fert_history", "agriNovaHistory", "latestSoilReportId", "agrinovaSchemes"];
 
   var PENDING = "agrinova_sync_pending";   // changes not yet saved to the server
   var OWNER = "agrinova_sync_owner";       // whose data this phone currently holds
@@ -160,9 +160,6 @@
       var server = j.data || {};
       var pend = readPending();
       var changed = false;
-      // true only when THIS phone has already synced with this account before. A phone that has never
-      // synced (old data typed before sync existed) must upload its data, never delete it.
-      var known = ls.getItem(OWNER) === email;
       applying = true;
       try {
         KEYS.forEach(function (k) {
@@ -171,7 +168,7 @@
           if (has) {
             if (ls.getItem(k) !== server[k]) { put(k, server[k]); changed = true; }
           } else if (ls.getItem(k) !== null) {
-            if (!j.exists || !known) {                                      // brand-new account / first sync of this phone: upload what this phone has
+            if (!j.exists) {                                                // brand-new account: upload what this phone has
               var up = readPending(); up[k] = ls.getItem(k); writePending(up);
             } else {                                                        // removed on another phone (or old leftover data)
               del(k); changed = true;
@@ -236,5 +233,25 @@
     return loadFirebase().then(function (fb) { return fb.auth().sendPasswordResetEmail(String(email).trim()); });
   }
 
-  window.AgriSync = { onLogin: onLogin, logout: logout, pull: pull, flush: flush, resetPassword: resetPassword, getToken: getToken };
+  /* ---------- one language for the whole app (English / Tamil) ----------
+   * Saved in localStorage key "agrinova_lang", which is in KEYS, so it also follows the farmer
+   * to every phone. Every module reads it on load and writes it when the farmer switches. */
+  window.AgriLang = {
+    get: function () { return ls.getItem("agrinova_lang") === "ta" ? "ta" : "en"; },
+    set: function (l) {
+      l = l === "ta" ? "ta" : "en";
+      if (ls.getItem("agrinova_lang") !== l) ls.setItem("agrinova_lang", l);
+    }
+  };
+
+  // GET one of this farmer's saved lists from the server (null when logged out / offline)
+  function mine(path) {
+    var email = cur();
+    if (!email) return Promise.resolve(null);
+    return window.fetch(BACKEND + path + "?owner=" + encodeURIComponent(email))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+
+  window.AgriSync = { onLogin: onLogin, logout: logout, pull: pull, flush: flush, resetPassword: resetPassword, getToken: getToken, lang: window.AgriLang, mine: mine };
 })();
