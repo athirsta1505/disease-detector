@@ -61,14 +61,34 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 // Used only when the main model keeps answering "high demand" (503/429) or is unavailable (404).
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.6-flash';
 
+let _preferredModel = null;                 // a model found by auto-detection that really works for this key
+let _modelCache = { at: 0, list: [] };
+// Asks Google which Gemini "flash" models this API key may use (newest first, stable names only).
+async function discoverModels() {
+  if (_modelCache.list.length && Date.now() - _modelCache.at < 60 * 60 * 1000) return _modelCache.list;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${GEMINI_API_KEY}`, { signal: AbortSignal.timeout(8000) });
+    const j = await r.json();
+    const ver = n => parseFloat((/^gemini-(\d+(?:\.\d+)?)/.exec(n) || [0, 0])[1]);
+    const list = (j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(n => /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(n))
+      .sort((a, b) => (ver(b) - ver(a)) || ((/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0)));
+    if (list.length) _modelCache = { at: Date.now(), list };
+    return list;
+  } catch (e) { console.error('Could not list Gemini models:', e.message); return []; }
+}
+
 // Calls Gemini; retries busy errors / slow responses with a short wait, then tries the fallback model.
 // A 404 (model no longer available) jumps straight to the fallback model.
 // opts.fast = ask the model to skip "thinking" (MUCH faster for chat). If a model rejects that
 // setting, the call is repeated without it. The whole call gives up after ~55 seconds.
 async function geminiFetch(body, timeoutMs, opts = {}) {
   const busy = new Set([429, 500, 502, 503, 504]);
-  const plan = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
+  const base = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_FALLBACK_MODEL]
     .filter((m, i, a) => m && (i < 2 || a[0] !== m));
+  const plan = _preferredModel ? [_preferredModel, _preferredModel].concat(base) : base;
   const deadline = Date.now() + (opts.totalMs || 55000);
   let thinkingOff = !!opts.fast;
   let firstData = null, firstStatus = 0;
@@ -107,6 +127,31 @@ async function geminiFetch(body, timeoutMs, opts = {}) {
     if (!busy.has(response.status) && response.status !== 404) break;
     if (response.status === 404) { while (i < plan.length - 1 && plan[i + 1] === plan[i]) i++; }
     else if (i < plan.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+  }
+  // Every configured model said "not found" (404): ask Google which Gemini models this key can use and try those.
+  if (firstStatus === 404 && GEMINI_API_KEY) {
+    const tried = new Set(plan);
+    const alt = (await discoverModels()).filter(m => !tried.has(m)).slice(0, 3);
+    for (const m of alt) {
+      for (const useThink of (opts.fast ? [true, false] : [false])) {
+        const left = deadline - Date.now();
+        if (left < 2000) break;
+        const payload = useThink
+          ? Object.assign({}, body, { generationConfig: Object.assign({}, body.generationConfig || {}, { thinkingConfig: { thinkingBudget: 0 } }) })
+          : body;
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(Math.min(timeoutMs || 30000, left)) });
+          let data = {}; try { data = await response.json(); } catch (_) { }
+          if (response.ok) { _preferredModel = m; console.log('Gemini: using auto-detected model', m); return { response, data }; }
+          console.error(`Gemini auto-detected ${m} failed (${response.status}):`, data && data.error && data.error.message);
+          if (response.status === 400 && useThink) continue;   // retry the same model without the "no thinking" setting
+          break;
+        } catch (e) { console.error(`Gemini auto-detected ${m} did not answer:`, e.message); break; }
+      }
+    }
   }
   const err = new Error((firstData && firstData.error && firstData.error.message) || 'The AI service returned an error.');
   err.status = firstStatus;
@@ -279,7 +324,24 @@ app.post('/hasura/diagnose', async (req, res) => {
 
 /* ============================= CHATBOT (direct REST) ============================= */
 // Called directly by chatbot.html — NOT through Hasura.
+// Works out how the farmer wrote their message: Tamil script, "Tanglish" (Tamil in English letters) or English.
+const TANGLISH_WORDS = new Set(('enna ennaku enakku eppadi epdi iruku irukku irukkum irukkuthu irukkum panna pannanum pannunga pannuven pannalama panalama pannu ' +
+  'venum venuma vendam sollu sollunga solluga podanum podalama podalaama nalla romba konjam neenga ungaluku ungalukku illa illai aana aanaa ' +
+  'maram nellu thenga vayal poochi poochchi payir uram thanni mazhai vivasayam evlo evvalavu seiyanum vandhuchu vanthuchu aagum aaguthu aagala ' +
+  'sapdalama ethuku edhuku theriyuma theriyala puriyala ennanu enga engae kudu kudunga kaatunga vaanga varum varudhu varuthu theriyum onnu rendu moonu ' +
+  'ellam ellaa adhu athu idhu ithu intha antha indha andha ethu edhu thaan dhaan seiya nadavu naan nan epo eppo yaen yean').split(/\s+/));
+function detectStyle(text) {
+  const t = String(text || '');
+  if (/[\u0B80-\u0BFF]/.test(t)) return 'ta';
+  const words = t.toLowerCase().match(/[a-z]+/g) || [];
+  let hits = 0, strong = 0;
+  for (const w of words) if (TANGLISH_WORDS.has(w)) { hits++; if (w !== 'naan' && w !== 'nan') strong++; }
+  if (hits >= 2 || (strong >= 1 && words.length <= 8)) return 'tanglish';
+  return 'en';
+}
+
 function languageRuleFor(lang) {
+  if (lang === 'tanglish') return `The farmer wrote in "Tanglish" (Tamil words typed in English letters). Reply in the SAME Tanglish style: Tamil words written in Latin letters, casual, simple and easy to read (for example "thenga maram ku mazhai neram nalla uram podalam"). Do NOT use Tamil script and do NOT reply in formal English. Technical terms (fertilizer names like Urea, DAP, NPK, units) may stay in English.`;
   if (lang === 'ta') return `Reply ENTIRELY in the Tamil language, in Tamil (தமிழ்) script only, whatever script the farmer typed in. Do not mix in English sentences and do not use Tanglish.`;
   if (lang === 'en') return `Reply ENTIRELY in plain English, whatever script the farmer typed in.`;
   return `Look ONLY at the farmer's latest message and copy its language STYLE exactly (ignore the language of earlier turns):
@@ -336,7 +398,7 @@ app.post('/api/chat', async (req, res) => {
     let text;
     try {
       text = await callGeminiChat({
-        system: chatSystemPrompt(lang, false),
+        system: chatSystemPrompt(lang || detectStyle(message), false),
         contents: buildChatContents(history, String(message).trim().slice(0, 3000))
       });
     } catch (e) {
@@ -372,7 +434,7 @@ app.post('/api/chat-image', async (req, res) => {
     let text;
     try {
       text = await callGeminiChat({
-        system: chatSystemPrompt(lang, true),
+        system: chatSystemPrompt(lang || detectStyle(message), true),
         contents: buildChatContents(history, userMessage, [{ inline_data: { mime_type: mediaType, data: image } }])
       });
     } catch (e) {
