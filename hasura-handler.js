@@ -90,6 +90,7 @@ async function geminiFetch(body, timeoutMs, opts = {}) {
     .filter((m, i, a) => m && (i < 2 || a[0] !== m));
   const plan = _preferredModel ? [_preferredModel, _preferredModel].concat(base) : base;
   const deadline = Date.now() + (opts.totalMs || 55000);
+  geminiFetch._waited = false;
   let thinkingOff = !!opts.fast;
   let firstData = null, firstStatus = 0;
   for (let i = 0; i < plan.length; i++) {
@@ -126,12 +127,20 @@ async function geminiFetch(body, timeoutMs, opts = {}) {
     // 404 = model not available -> skip to the fallback model; other non-busy errors (bad key etc.) stop here
     if (!busy.has(response.status) && response.status !== 404) break;
     if (response.status === 404) { while (i < plan.length - 1 && plan[i + 1] === plan[i]) i++; }
+    else if (response.status === 429 && !geminiFetch._waited) {
+      // Google says how long to wait ("retryDelay": "3s"): wait that long (max 4s) once, then retry the same model.
+      const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(JSON.stringify(data || {}));
+      const wait = Math.min(4000, m ? Math.ceil(parseFloat(m[1]) * 1000) : 1500);
+      geminiFetch._waited = true;
+      await new Promise(r => setTimeout(r, wait));
+      if (deadline - Date.now() > wait + 4000) i--;
+    }
     else if (i < plan.length - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
   // Every configured model said "not found" (404): ask Google which Gemini models this key can use and try those.
-  if (firstStatus === 404 && GEMINI_API_KEY) {
+  if ((firstStatus === 404 || busy.has(firstStatus)) && GEMINI_API_KEY) {
     const tried = new Set(plan);
-    const alt = (await discoverModels()).filter(m => !tried.has(m)).slice(0, 3);
+    const alt = (await discoverModels()).filter(m => !tried.has(m)).slice(0, 5);
     for (const m of alt) {
       for (const useThink of (opts.fast ? [true, false] : [false])) {
         const left = deadline - Date.now();
@@ -191,6 +200,7 @@ async function callGeminiChat({ system, contents, maxTokens = 1800 }) {
 // Short, farmer-friendly error text for the chat window.
 function friendlyGeminiError(e) {
   const s = e && e.status;
+  if (s === 429 && /per ?day|daily|PerDay/i.test((e && e.message) || '')) return 'The AI daily free limit is finished. Please try again tomorrow, or ask the app owner to enable billing / use a new GEMINI_API_KEY.';
   if (s === 429) return 'The AI is very busy right now. Please try again in a few seconds.';
   if (s === 500 || s === 502 || s === 503 || s === 504) return 'The AI service is busy or slow right now. Please try again in a moment.';
   if (s === 404) return 'The AI model is not available on the server. Please ask the app owner to update GEMINI_MODEL.';
@@ -330,14 +340,58 @@ const TANGLISH_WORDS = new Set(('enna ennaku enakku eppadi epdi iruku irukku iru
   'maram nellu thenga vayal poochi poochchi payir uram thanni mazhai vivasayam evlo evvalavu seiyanum vandhuchu vanthuchu aagum aaguthu aagala ' +
   'sapdalama ethuku edhuku theriyuma theriyala puriyala ennanu enga engae kudu kudunga kaatunga vaanga varum varudhu varuthu theriyum onnu rendu moonu ' +
   'ellam ellaa adhu athu idhu ithu intha antha indha andha ethu edhu thaan dhaan seiya nadavu naan nan epo eppo yaen yean').split(/\s+/));
-function detectStyle(text) {
+const TANGLISH_EXTRA = new Set(('la ku ah da ya pa ma sir anna akka bro thambi amma appa ippo ippodhu inniki innaiku nethu naalaiku ' +
+  'epadi epdi yenna yen eppadi evlo ethana ethanai enakku unakku unga ungaluku engaluku avanga avan aval ' +
+  'pannalam pannanum pannunga panren pannren panni pannitu seyyalam seiyalam seiyanum sollu sollunga sollren solren ' +
+  'paaru paarunga paakanum paathen kaatu kaattu kudunga kudu thaanga vaanganum vaanga vaangalama poganum pogalam poren varen vaa ' +
+  'irukku iruku irukkum irukkuthu irukkanum illa illai irukaa irukka iruntha irundhaa ' +
+  'ennanu enna eppo eppodhu enga engae yaaru yaar edhukku ethukku ethuku edhuku ' +
+  'romba rombha konjam nalla nalladhu mosam super thaan dhaan dhane daane aana aanaa aama ama ille ' +
+  'venum venuma vendam vendaam venaam theva thevai podanum podalam podalama podunga poduvom ' +
+  'maram marangal nellu nel arisi thenga vaazha vazhai manjal kathirikai thakkali vengayam kambu ragi kadalai ' +
+  'vayal thotam nilam mann maNN man payir payiru pasu aadu kozhi ' +
+  'poochi poochchi poochi noi nooi ilai ilaigal ilaiyil vaadi vaadudhu vaadiduchu mancha karuppu ' +
+  'uram uramaa eru thanni neer mazhai maLai veyil kaathu vivasayam vivasaayi vilai vilaichal ' +
+  'sappadu sapdalama sapdanum kudikka theriyuma theriyala theriyum puriyala puriyudhu purinjidhu ' +
+  'vandhuchu vanthuchu vandhudhu aagum aaguthu aagala aagi aachu aaiduchu aayiduchu ' +
+  'seiya seyya nadavu naan nan naanga naama nama neenga nee ange inge anga inga ' +
+  'adhu athu idhu ithu intha antha indha andha ethu edhu ellam ellaa ellarum onnu rendu moonu naalu anju ' +
+  'nalla eppadi evvalavu evalo neram naal maasam varusham kaalam ' +
+  'pesu pesalama pesunga sonna sonnen sollitten kelvi kelunga unmai therinjikka vizhunthuduchu mudiyum mudiyuma mudiyathu ' +
+  'thevaiyaana thevaiyilla seiyalaama pannalaama vaanga poi vandhu pona ponaa kedaikum kedaikkum kidaikkum ' +
+  'enakku ungalukku avangalukku nammaku namakku').split(/\s+/).filter(Boolean));
+const TANGLISH_SUFFIX = /(?:nga|ngaa|kku|ukku|aanga|aaga|aachu|uchu|chu|thu|dhu|num|num|laam|laama|ngala|raanga|ren|rom|veen|veenga|ppom|nga\b)$/;
+function scoreTanglish(text) {
+  const words = String(text || '').toLowerCase().match(/[a-z]+/g) || [];
+  let hits = 0, strong = 0;
+  for (const w of words) {
+    const base = TANGLISH_WORDS.has(w) || TANGLISH_EXTRA.has(w);
+    if (base) { hits++; if (w !== 'naan' && w !== 'nan' && w !== 'la' && w !== 'ku' && w !== 'ah' && w !== 'ya' && w !== 'ma') strong++; }
+    else if (w.length >= 6 && TANGLISH_SUFFIX.test(w)) { hits += 0.5; }
+  }
+  return { hits, strong, n: words.length };
+}
+function detectStyle(text, history) {
   const t = String(text || '');
   if (/[\u0B80-\u0BFF]/.test(t)) return 'ta';
-  const words = t.toLowerCase().match(/[a-z]+/g) || [];
-  let hits = 0, strong = 0;
-  for (const w of words) if (TANGLISH_WORDS.has(w)) { hits++; if (w !== 'naan' && w !== 'nan') strong++; }
-  if (hits >= 2 || (strong >= 1 && words.length <= 8)) return 'tanglish';
+  const { hits, strong, n } = scoreTanglish(t);
+  if (hits >= 2 || (strong >= 1 && n <= 8)) return 'tanglish';
+  // Very short / ambiguous message (e.g. just "coconut" or "ok"): keep the style the farmer used in their previous message.
+  if (n <= 2 && Array.isArray(history)) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const h = history[i];
+      if (h && h.role === 'user' && typeof h.content === 'string' && h.content.trim()) {
+        return /[\u0B80-\u0BFF]/.test(h.content) ? 'ta' : (() => { const r = scoreTanglish(h.content); return (r.hits >= 2 || (r.strong >= 1 && r.n <= 8)) ? 'tanglish' : 'en'; })();
+      }
+    }
+  }
   return 'en';
+}
+// A short tag glued onto the farmer's CURRENT message so earlier turns in another language cannot pull the reply off-style.
+function styleTag(style) {
+  if (style === 'tanglish') return '\n\n[Reply in Tanglish only: Tamil words typed in English letters, casual. No Tamil script, no formal English.]';
+  if (style === 'ta') return '\n\n[Reply only in Tamil script (தமிழ்).]';
+  return '\n\n[Reply only in English.]';
 }
 
 function languageRuleFor(lang) {
@@ -384,6 +438,18 @@ function buildChatContents(history, text, extraParts) {
   return turns;
 }
 
+// Open https://YOUR-RENDER-URL/api/ai-status in a browser: shows the REAL reason the AI is failing (quota, bad key, wrong model...).
+app.get('/api/ai-status', async (req, res) => {
+  const out = { keySet: !!GEMINI_API_KEY, model: GEMINI_MODEL, fallback: GEMINI_FALLBACK_MODEL, preferred: _preferredModel };
+  if (!GEMINI_API_KEY) return res.json(Object.assign(out, { ok: false, problem: 'GEMINI_API_KEY is not set in Render > Environment.' }));
+  try {
+    const t = await callGeminiChat({ system: 'Reply with one word.', contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], maxTokens: 20 });
+    res.json(Object.assign(out, { ok: true, reply: t.trim() }));
+  } catch (e) {
+    res.json(Object.assign(out, { ok: false, status: e.status || null, problem: e.message }));
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, history, lang } = req.body || {};
@@ -398,8 +464,8 @@ app.post('/api/chat', async (req, res) => {
     let text;
     try {
       text = await callGeminiChat({
-        system: chatSystemPrompt(lang || detectStyle(message), false),
-        contents: buildChatContents(history, String(message).trim().slice(0, 3000))
+        system: chatSystemPrompt(lang || detectStyle(message, history), false),
+        contents: buildChatContents(history, String(message).trim().slice(0, 3000) + styleTag(lang || detectStyle(message, history)))
       });
     } catch (e) {
       console.error('Gemini API error (chat):', e.message);
@@ -434,8 +500,8 @@ app.post('/api/chat-image', async (req, res) => {
     let text;
     try {
       text = await callGeminiChat({
-        system: chatSystemPrompt(lang || detectStyle(message), true),
-        contents: buildChatContents(history, userMessage, [{ inline_data: { mime_type: mediaType, data: image } }])
+        system: chatSystemPrompt(lang || detectStyle(message, history), true),
+        contents: buildChatContents(history, userMessage + styleTag(lang || detectStyle(message, history)), [{ inline_data: { mime_type: mediaType, data: image } }])
       });
     } catch (e) {
       console.error('Gemini API error (chat-image):', e.message);
