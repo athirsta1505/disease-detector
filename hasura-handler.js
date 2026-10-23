@@ -2262,6 +2262,18 @@ app.post('/api/fertilizer-advice', ownerGuard, async (req, res) => {
       recommended_fertilizer: txt(b.recommended, 600), quantity: txt(b.quantity, 60),
       plan: Array.isArray(b.plan) ? b.plan.slice(0, 12).map(r => ({ fertilizer: txt(r && r.fertilizer, 80), kg: numOrNull(r && r.kg) })) : []
     };
+    // Link this advice to a soil report: the id the page sent (only if it belongs to this farmer),
+    // otherwise this farmer's latest soil report. Stays null only if they never saved one.
+    try {
+      const wanted = Number(b.soilReportId);
+      const q = await hasuraGql(
+        `query($o:String!, $id:Int!){
+           mine: agri_soil_reports(where:{owner:{_eq:$o}, id:{_eq:$id}}, limit:1){ id }
+           latest: agri_soil_reports(where:{owner:{_eq:$o}}, order_by:{created_at:desc}, limit:1){ id } }`,
+        { o: req.owner, id: Number.isInteger(wanted) && wanted > 0 ? wanted : -1 });
+      const link = (q.mine && q.mine[0]) || (q.latest && q.latest[0]);
+      if (link) rec.soil_report_id = link.id;
+    } catch (linkErr) { console.error('Soil report link failed:', linkErr.message); }
     const log = {
       owner: req.owner, module: 'fertilizer', action: 'recommend',
       input: { crop: rec.crop, soil: rec.soil, area: rec.area, n: rec.n_level, p: rec.p_level, k: rec.k_level },
@@ -2334,6 +2346,25 @@ app.post('/api/fertilizer-usage/delete', ownerGuard, async (req, res) => {
 // ---- Market price searches (also logged in the activity log) ----
 app.use('/api/market-searches', rateLimit(40, 60 * 1000));
 
+// price_date must never be NULL. Accepts "28/09/2026", "28-09-2026", "2026-09-28" or "28 Sep 2026";
+// the AI-estimate source sends no date at all, so those (and unreadable dates) get today's date (IST).
+function normalizePriceDate(v) {
+  const todayIST = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const str = String(v == null ? '' : v).trim();
+  if (!str) return todayIST;
+  let y, m, d, x;
+  if ((x = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) { y = +x[1]; m = +x[2]; d = +x[3]; }
+  else if ((x = str.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/))) { d = +x[1]; m = +x[2]; y = +x[3]; }
+  else {
+    const t = new Date(str + ' 12:00 UTC');
+    if (isNaN(t)) return todayIST;
+    y = t.getUTCFullYear(); m = t.getUTCMonth() + 1; d = t.getUTCDate();
+  }
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return todayIST;
+  return dt.toISOString().slice(0, 10);
+}
+
 app.post('/api/market-searches', ownerGuard, async (req, res) => {
   try {
     const b = req.body || {};
@@ -2342,7 +2373,7 @@ app.post('/api/market-searches', ownerGuard, async (req, res) => {
       state: txt(b.state, 80), district: txt(b.district, 80), market: txt(b.market, 120), crop: txt(b.crop, 100),
       quantity_kg: numOrNull(b.qty),
       min_price: numOrNull(b.min), max_price: numOrNull(b.max), modal_price: numOrNull(b.modal),
-      unit: txt(b.unit, 40), source: txt(b.source, 20), price_date: txt(b.priceDate, 40)
+      unit: txt(b.unit, 40), source: txt(b.source, 20), price_date: normalizePriceDate(b.priceDate)
     };
     const log = {
       owner: req.owner, module: 'market_prices', action: 'view_price',
